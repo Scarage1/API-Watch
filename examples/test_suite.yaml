@@ -1,0 +1,102 @@
+name: "Customer Onboarding Smoke Tests"
+description: "End-to-end smoke tests for customer onboarding flow"
+base_url: "https://api.example.com"
+
+# Default configuration for all tests
+defaults:
+  headers:
+    Content-Type: "application/json"
+    User-Agent: "API-Debug-Toolkit/1.0"
+  timeout_seconds: 10
+  retries: 3
+
+# Authentication configuration
+# Type can be: bearer, api_key, or basic
+auth:
+  type: bearer
+  token_env: API_TOKEN  # Reads from environment variable API_TOKEN
+
+# Test cases
+tests:
+  # Health Check
+  - id: health_check
+    method: GET
+    path: /health
+    description: "Verify API is healthy and responsive"
+
+  # User Profile Tests
+  - id: get_user_profile
+    method: GET
+    path: /v1/profile
+    description: "Retrieve authenticated user profile"
+
+  - id: update_user_profile
+    method: PUT
+    path: /v1/profile
+    description: "Update user profile information"
+    body:
+      name: "John Doe"
+      email: "john.doe@example.com"
+      preferences:
+        notifications: true
+        language: "en"
+
+  # Resource Management Tests
+  - id: list_resources
+    method: GET
+    path: /v1/resources
+    params:
+      page: 1
+      limit: 10
+    description: "List available resources"
+
+  - id: create_resource
+    method: POST
+    path: /v1/resources
+    description: "Create a new resource"
+    body:
+      title: "Test Resource"
+      description: "Created by API test suite"
+      priority: "high"
+      tags:
+        - "test"
+        - "automated"
+
+  - id: get_resource_details
+    method: GET
+    path: /v1/resources/123
+    description: "Get specific resource details"
+
+  - id: update_resource
+    method: PATCH
+    path: /v1/resources/123
+    description: "Update resource status"
+    body:
+      status: "in_progress"
+
+  - id: delete_resource
+    method: DELETE
+    path: /v1/resources/123
+    description: "Delete test resource"
+
+  # Analytics Tests
+  - id: get_analytics
+    method: GET
+    path: /v1/analytics/summary
+    params:
+      start_date: "2026-01-01"
+      end_date: "2026-01-19"
+    description: "Retrieve analytics summary"
+
+  # Webhook Configuration
+  - id: configure_webhook
+    method: POST
+    path: /v1/webhooks
+    description: "Configure webhook endpoint"
+    body:
+      url: "https://webhook.example.com/receiver"
+      events:
+        - "resource.created"
+        - "resource.updated"
+        - "resource.deleted"
+      active: true

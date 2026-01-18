@@ -1,0 +1,18 @@
+# Core dependencies
+requests>=2.31.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+
+# Beautiful terminal output
+rich>=13.7.0
+
+# HTML report generation
+jinja2>=3.1.2
+
+# Webhook server (bonus feature)
+fastapi>=0.109.0
+uvicorn>=0.27.0
+
+# Development and testing
+pytest>=7.4.3
+pytest-asyncio>=0.23.3

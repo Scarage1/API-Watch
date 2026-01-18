@@ -1,0 +1,34 @@
+{
+  "title": "Customer Support Ticket",
+  "description": "User experiencing API authentication issues",
+  "priority": "high",
+  "category": "technical_support",
+  "customer": {
+    "id": "CUST-12345",
+    "name": "Acme Corporation",
+    "email": "support@acmecorp.com",
+    "tier": "enterprise"
+  },
+  "issue": {
+    "type": "authentication_error",
+    "error_code": "401",
+    "endpoint": "/v1/api/users",
+    "timestamp": "2026-01-19T10:30:00Z",
+    "attempts": 5
+  },
+  "environment": {
+    "platform": "production",
+    "region": "us-east-1",
+    "api_version": "v1"
+  },
+  "tags": [
+    "auth",
+    "urgent",
+    "api"
+  ],
+  "metadata": {
+    "source": "automated_monitoring",
+    "severity": "critical",
+    "sla_deadline": "2026-01-19T14:30:00Z"
+  }
+}
