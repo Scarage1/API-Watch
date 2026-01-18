@@ -3,7 +3,7 @@ Authentication module for API requests.
 Supports multiple authentication methods: Bearer token, API key, Basic auth.
 """
 from typing import Dict, Optional
-from utils import get_env_var
+from .utils import get_env_var
 
 
 class AuthHandler:

@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError
 
-from auth import AuthHandler
-from retry import RetryHandler, RetryConfig
-from utils import format_bytes, format_duration, get_iso_timestamp
+from .auth import AuthHandler
+from .retry import RetryHandler, RetryConfig
+from .utils import format_bytes, format_duration, get_iso_timestamp
 
 
 @dataclass

@@ -7,9 +7,9 @@ from typing import List, Dict, Any
 from pathlib import Path
 from jinja2 import Template
 
-from runner import RequestResult
-from diagnose import DiagnosisEngine, Diagnosis
-from utils import (
+from .runner import RequestResult
+from .diagnose import DiagnosisEngine, Diagnosis
+from .utils import (
     ensure_directory, 
     get_timestamp, 
     format_duration, 

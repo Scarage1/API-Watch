@@ -16,7 +16,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils import (
+from .utils import (
     load_env, 
     get_env_var, 
     ensure_directory, 
@@ -25,11 +25,11 @@ from utils import (
     format_duration,
     format_bytes
 )
-from auth import AuthHandler, create_auth_from_config
-from retry import RetryConfig
-from runner import APIRunner, RequestConfig, RequestResult
-from diagnose import DiagnosisEngine
-from report import ReportGenerator
+from .auth import AuthHandler, create_auth_from_config
+from .retry import RetryConfig
+from .runner import APIRunner, RequestConfig, RequestResult
+from .diagnose import DiagnosisEngine
+from .report import ReportGenerator
 
 
 console = Console()

@@ -4,7 +4,7 @@ Analyzes errors and provides troubleshooting suggestions.
 """
 from typing import Optional, Dict, List
 from dataclasses import dataclass
-from runner import RequestResult
+from .runner import RequestResult
 
 
 @dataclass
