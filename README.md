@@ -13,46 +13,6 @@
 
 ---
 
-## 🎯 What Problem Does It Solve?
-
-### **The Customer Integration Challenge (FDE Perspective)**
-
-When onboarding new customers at companies like Plivo, Forward Deployed Engineers face recurring challenges:
-
-**❌ Manual API Testing is Time-Consuming**
-- Engineers spend hours manually testing customer API endpoints with Postman or cURL
-- Each customer integration requires repetitive debugging cycles
-- No standardized process for validating integrations
-
-**❌ Cryptic Error Messages**
-- Customers report "API not working" without details
-- Engineers waste time deciphering 401/403/429/5xx errors
-- No clear troubleshooting guidance for customers
-
-**❌ Lack of Integration Validation**
-- No automated smoke tests for customer onboarding
-- Webhook integrations break silently in production
-- No way to validate full integration workflows
-
-**❌ Poor Documentation Trail**
-- Manual notes scattered across tickets and Slack
-- No shareable reports for customer success teams
-- Difficult to reproduce and debug issues later
-
-### **✅ How API-Watch Solves This (FDE Solution)**
-
-**API-Watch automates the entire customer integration validation workflow:**
-
-1. **Automated Smoke Tests** → Run YAML-based test suites to validate customer integrations in minutes
-2. **Instant Error Diagnosis** → Automatically detect and explain API failures with actionable fixes
-3. **Smart Retry Logic** → Handle transient failures (429, 5xx) with exponential backoff
-4. **Beautiful Reports** → Generate HTML/JSON reports ready to share with customers and teams
-5. **Local Webhook Testing** → Test webhook payloads locally before customer deployment
-
-**Result:** Reduce customer onboarding time from days to hours, and API debugging from hours to minutes.
-
----
-
 ## 🌟 Features
 
 ### Core Capabilities
@@ -65,12 +25,7 @@ When onboarding new customers at companies like Plivo, Forward Deployed Engineer
 ✅ **YAML Test Suites** - Define and run complete onboarding validation workflows  
 ✅ **Webhook Test Server** - Local FastAPI server to receive and log webhook payloads  
 
-### FDE-Specific Benefits
-🎯 **Customer Onboarding Automation** - Run standardized smoke tests for every customer  
-🎯 **Instant Troubleshooting** - Share diagnostic reports with customers immediately  
-🎯 **Integration Validation** - Verify customer webhooks before production deployment  
-🎯 **Audit Trail** - Complete logs of all API tests and results  
-
+  
 ---
 
 ## 🏗️ Architecture
@@ -716,49 +671,11 @@ docker run -p 8080:8080 api-watch-webhook
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-**Development Setup:**
-```bash
-# Clone and setup
-git clone https://github.com/yourusername/api-watch.git
-cd api-watch
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install -r requirements.txt
-
-# Run tests
-pytest tests/
-
-# Run with debug
-python src/main.py suite --file examples/test_suite.yaml --verbose
-```
 
 ---
 
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-## 🙋 Support & Contact
-
-**For Plivo Recruiters:** This tool was built to solve real customer integration challenges faced by Forward Deployed Engineers. It demonstrates:
-- ✅ Production-ready Python development
-- ✅ API integration expertise  
-- ✅ Customer-focused problem solving
-- ✅ Clean code architecture
-- ✅ Comprehensive documentation
-- ✅ Deployed production service (Render + Cloudflare)
-
-**Live Demos:**
-- 🌐 Webhook Server: `https://api-watch-webhook.onrender.com`
-- 📊 Sample Reports: `https://api-watch.pages.dev`
-
-**Questions?** Open an issue or reach out!
-
----
-
-**Built with ❤️ for Forward Deployed Engineers**
-
 
 
