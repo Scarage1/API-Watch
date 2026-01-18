@@ -1,0 +1,180 @@
+name: "Customer Onboarding Validation Suite"
+description: "Complete integration validation for new customer onboarding - FDE Toolkit"
+base_url: "https://api.plivo.com"  # Replace with your API base URL
+
+# Default configuration for all tests
+defaults:
+  headers:
+    Content-Type: "application/json"
+    User-Agent: "API-Watch-FDE/1.0"
+  timeout_seconds: 10
+  retries: 3
+
+# Authentication configuration
+auth:
+  type: bearer  # Options: bearer, api_key, basic
+  token_env: API_TOKEN  # Reads from environment variable
+
+# Customer Onboarding Test Cases
+tests:
+  # ============================================
+  # PHASE 1: Authentication & Account Validation
+  # ============================================
+  
+  - id: health_check
+    method: GET
+    path: /v1/health
+    description: "Verify API endpoint is reachable and healthy"
+    
+  - id: validate_authentication
+    method: GET
+    path: /v1/Account/{account_id}/
+    description: "Validate customer authentication credentials"
+    # Replace {account_id} with actual account ID in .env
+    
+  - id: get_account_details
+    method: GET
+    path: /v1/Account/{account_id}/
+    description: "Retrieve customer account information"
+
+  # ============================================
+  # PHASE 2: Core Integration Tests
+  # ============================================
+
+  - id: list_applications
+    method: GET
+    path: /v1/Account/{account_id}/Application/
+    description: "List customer applications"
+    params:
+      limit: 20
+      offset: 0
+
+  - id: create_test_application
+    method: POST
+    path: /v1/Account/{account_id}/Application/
+    description: "Create test application for customer"
+    body:
+      app_name: "Customer Onboarding Test App"
+      answer_url: "https://customer.example.com/answer/"
+      answer_method: "POST"
+
+  - id: get_application_details
+    method: GET
+    path: /v1/Account/{account_id}/Application/{app_id}/
+    description: "Retrieve application details"
+
+  # ============================================
+  # PHASE 3: Number & Messaging Validation
+  # ============================================
+
+  - id: list_numbers
+    method: GET
+    path: /v1/Account/{account_id}/Number/
+    description: "List customer phone numbers"
+    params:
+      limit: 20
+
+  - id: send_test_message
+    method: POST
+    path: /v1/Account/{account_id}/Message/
+    description: "Send test SMS message"
+    body:
+      src: "+1234567890"  # Replace with customer's number
+      dst: "+0987654321"  # Replace with test destination
+      text: "API-Watch Customer Onboarding Test Message"
+
+  - id: check_message_status
+    method: GET
+    path: /v1/Account/{account_id}/Message/{message_uuid}/
+    description: "Check message delivery status"
+
+  # ============================================
+  # PHASE 4: Call Functionality Tests
+  # ============================================
+
+  - id: list_calls
+    method: GET
+    path: /v1/Account/{account_id}/Call/
+    description: "List recent calls"
+    params:
+      limit: 10
+
+  - id: make_test_call
+    method: POST
+    path: /v1/Account/{account_id}/Call/
+    description: "Initiate test call"
+    body:
+      from: "+1234567890"  # Replace with customer's number
+      to: "+0987654321"    # Replace with test destination
+      answer_url: "https://customer.example.com/answer/"
+      answer_method: "POST"
+
+  # ============================================
+  # PHASE 5: Webhook Configuration
+  # ============================================
+
+  - id: verify_webhook_config
+    method: GET
+    path: /v1/Account/{account_id}/Application/{app_id}/
+    description: "Verify webhook URLs are configured"
+
+  - id: update_webhook_settings
+    method: POST
+    path: /v1/Account/{account_id}/Application/{app_id}/
+    description: "Update webhook configuration"
+    body:
+      message_url: "https://customer.example.com/webhook/message"
+      message_method: "POST"
+      hangup_url: "https://customer.example.com/webhook/hangup"
+      hangup_method: "POST"
+
+  # ============================================
+  # PHASE 6: Error Handling Tests
+  # ============================================
+
+  - id: test_rate_limiting
+    method: GET
+    path: /v1/Account/{account_id}/Message/
+    description: "Test rate limit handling (will trigger 429)"
+    params:
+      limit: 1000  # High limit to potentially trigger rate limiting
+
+  - id: test_invalid_endpoint
+    method: GET
+    path: /v1/Account/{account_id}/InvalidEndpoint/
+    description: "Test error handling for invalid endpoint (404)"
+
+  - id: test_invalid_method
+    method: DELETE
+    path: /v1/Account/{account_id}/health
+    description: "Test invalid HTTP method handling (405)"
+
+  # ============================================
+  # PHASE 7: Billing & Usage Validation
+  # ============================================
+
+  - id: check_account_balance
+    method: GET
+    path: /v1/Account/{account_id}/
+    description: "Check customer account balance"
+
+  - id: get_pricing_info
+    method: GET
+    path: /v1/Account/{account_id}/Pricing/
+    description: "Retrieve pricing information"
+
+# ============================================
+# ONBOARDING SUCCESS CRITERIA
+# ============================================
+# 
+# This test suite validates:
+# ✅ Authentication works correctly
+# ✅ Customer can access account details
+# ✅ API endpoints are reachable
+# ✅ Core features (messaging, calling) work
+# ✅ Webhooks are properly configured
+# ✅ Error handling is robust
+# ✅ Rate limiting is handled gracefully
+#
+# Pass Rate Target: 95% (19/20 tests)
+# ============================================

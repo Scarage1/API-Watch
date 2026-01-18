@@ -37,9 +37,16 @@ ENV/
 logs/*.log
 logs/*.txt
 
-# Reports
+# Reports (keep sample for deployment)
 reports/*.html
 reports/*.json
+!reports/sample_report.html
+
+# Public folder (keep for Cloudflare Pages deployment)
+# Uncomment if you want to ignore everything except index.html
+# public/*
+# !public/index.html
+# !public/report.html
 
 # Environment variables
 .env

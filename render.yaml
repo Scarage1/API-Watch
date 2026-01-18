@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: api-watch-webhook
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.webhook_server:app --host 0.0.0.0 --port 10000
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 10000
