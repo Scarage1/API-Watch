@@ -1,0 +1,7 @@
+# Render Build Configuration
+
+# Force Python 3.11
+PYTHON_VERSION=3.11
+
+# This file ensures Render uses the correct Python version
+# See: https://render.com/docs/python-version
