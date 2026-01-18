@@ -1,0 +1,392 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>API Test Report - 2026-01-19T02:01:42.922496</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+        
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+			background: #f5f7fa;
+			color: #2c3e50;
+			padding: 20px;
+			line-height: 1.6;
+		}
+        
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+			background: white;
+			border-radius: 12px;
+			box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+			overflow: hidden;
+		}
+        
+		.header {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			padding: 40px 30px;
+		}
+        
+		.header h1 {
+			font-size: 32px;
+			margin-bottom: 10px;
+		}
+        
+		.header p {
+			opacity: 0.9;
+			font-size: 16px;
+		}
+        
+		.summary {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+			gap: 20px;
+			padding: 30px;
+			background: #f8f9fa;
+		}
+        
+		.stat-card {
+			background: white;
+			padding: 20px;
+			border-radius: 8px;
+			box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+		}
+        
+		.stat-card h3 {
+			font-size: 14px;
+			color: #6c757d;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			margin-bottom: 10px;
+		}
+        
+		.stat-card .value {
+			font-size: 32px;
+			font-weight: bold;
+			color: #2c3e50;
+		}
+        
+		.stat-card.success .value { color: #28a745; }
+		.stat-card.danger .value { color: #dc3545; }
+		.stat-card.warning .value { color: #ffc107; }
+		.stat-card.info .value { color: #17a2b8; }
+        
+		.content {
+			padding: 30px;
+		}
+        
+		.section {
+			margin-bottom: 40px;
+		}
+        
+		.section-title {
+			font-size: 24px;
+			margin-bottom: 20px;
+			padding-bottom: 10px;
+			border-bottom: 2px solid #667eea;
+		}
+        
+		.test-result {
+			background: white;
+			border: 1px solid #dee2e6;
+			border-radius: 8px;
+			margin-bottom: 15px;
+			overflow: hidden;
+		}
+        
+		.test-header {
+			padding: 15px 20px;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			cursor: pointer;
+			transition: background 0.2s;
+		}
+        
+		.test-header:hover {
+			background: #f8f9fa;
+		}
+        
+		.test-header.success {
+			border-left: 4px solid #28a745;
+		}
+        
+		.test-header.failure {
+			border-left: 4px solid #dc3545;
+		}
+        
+		.test-info {
+			flex: 1;
+		}
+        
+		.test-method {
+			display: inline-block;
+			padding: 4px 12px;
+			border-radius: 4px;
+			font-size: 12px;
+			font-weight: bold;
+			margin-right: 10px;
+		}
+        
+		.method-GET { background: #28a745; color: white; }
+		.method-POST { background: #007bff; color: white; }
+		.method-PUT { background: #ffc107; color: #000; }
+		.method-DELETE { background: #dc3545; color: white; }
+        
+		.test-url {
+			font-family: 'Courier New', monospace;
+			font-size: 14px;
+			color: #495057;
+		}
+        
+		.test-meta {
+			display: flex;
+			gap: 15px;
+			font-size: 13px;
+			color: #6c757d;
+		}
+        
+		.status-badge {
+			padding: 4px 12px;
+			border-radius: 12px;
+			font-size: 12px;
+			font-weight: bold;
+		}
+        
+		.status-success {
+			background: #d4edda;
+			color: #155724;
+		}
+        
+		.status-failure {
+			background: #f8d7da;
+			color: #721c24;
+		}
+        
+		.test-details {
+			padding: 20px;
+			background: #f8f9fa;
+			border-top: 1px solid #dee2e6;
+			display: none;
+		}
+        
+		.test-result.expanded .test-details {
+			display: block;
+		}
+        
+		.detail-group {
+			margin-bottom: 20px;
+		}
+        
+		.detail-group h4 {
+			font-size: 14px;
+			color: #6c757d;
+			margin-bottom: 10px;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+		}
+        
+		.detail-content {
+			background: white;
+			padding: 15px;
+			border-radius: 4px;
+			border: 1px solid #dee2e6;
+			font-family: 'Courier New', monospace;
+			font-size: 13px;
+			overflow-x: auto;
+		}
+        
+		.diagnosis {
+			background: #fff3cd;
+			border-left: 4px solid #ffc107;
+			padding: 15px;
+			border-radius: 4px;
+			margin-bottom: 15px;
+		}
+        
+		.diagnosis.critical {
+			background: #f8d7da;
+			border-left-color: #dc3545;
+		}
+        
+		.diagnosis.high {
+			background: #fff3cd;
+			border-left-color: #ffc107;
+		}
+        
+		.diagnosis h4 {
+			color: #856404;
+			margin-bottom: 8px;
+		}
+        
+		.diagnosis.critical h4 {
+			color: #721c24;
+		}
+        
+		.diagnosis p {
+			margin: 5px 0;
+			font-size: 14px;
+		}
+        
+		.footer {
+			background: #f8f9fa;
+			padding: 20px 30px;
+			text-align: center;
+			color: #6c757d;
+			font-size: 14px;
+		}
+        
+		@media (max-width: 768px) {
+			.summary {
+				grid-template-columns: 1fr;
+			}
+            
+			.test-header {
+				flex-direction: column;
+				align-items: flex-start;
+			}
+            
+			.test-meta {
+				margin-top: 10px;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="header">
+			<h1>🔍 API Test Report</h1>
+			<p>Generated: 2026-01-19T02:01:42.922496</p>
+            
+			<p>Test Suite: Customer Onboarding Validation Suite</p>
+            
+		</div>
+        
+		<div class="summary">
+			<div class="stat-card">
+				<h3>Total Requests</h3>
+				<div class="value">18</div>
+			</div>
+			<div class="stat-card success">
+				<h3>Successful</h3>
+				<div class="value">0</div>
+			</div>
+			<div class="stat-card danger">
+				<h3>Failed</h3>
+				<div class="value">18</div>
+			</div>
+			<div class="stat-card info">
+				<h3>Success Rate</h3>
+				<div class="value">0.0%</div>
+			</div>
+			<div class="stat-card info">
+				<h3>Avg Response Time</h3>
+				<div class="value">265ms</div>
+			</div>
+		</div>
+        
+		<div class="content">
+            
+			<div class="section">
+				<h2 class="section-title">⚠️ Issues Found</h2>
+                
+				<div class="diagnosis medium">
+					<h4>Not Found (404)</h4>
+					<p><strong>Cause:</strong> The requested resource or endpoint does not exist</p>
+					<p><strong>Suggestion:</strong> Verify the endpoint URL is correct. Check if the resource ID is valid. Ensure you're using the correct API version.</p>
+				</div>
+                
+				<div class="diagnosis critical">
+					<h4>Unauthorized Access (401)</h4>
+					<p><strong>Cause:</strong> Authentication token is missing, invalid, or expired</p>
+					<p><strong>Suggestion:</strong> Verify your API token/key is correct and not expired. Check if token is properly included in Authorization header.</p>
+				</div>
+                
+			</div>
+            
+            
+			<div class="section">
+				<h2 class="section-title">📋 Test Results</h2>
+                
+				<div class="test-result ">
+					<div class="test-header failure" 
+						 onclick="this.parentElement.classList.toggle('expanded')">
+						<div class="test-info">
+							<div>
+								<span class="test-method method-GET">GET</span>
+								<span class="test-url">https://api.plivo.com/v1/health</span>
+							</div>
+							<div class="test-meta">
+								<span>Status: 404</span>
+								<span>Time: 557ms</span>
+								<span>Size: 24.00 B</span>
+                                
+							</div>
+						</div>
+						<span class="status-badge status-failure">
+							✗ Failed
+						</span>
+					</div>
+                    
+					<div class="test-details">
+                        
+						<div class="detail-group">
+							<h4>🔍 Diagnosis</h4>
+                            
+							<div class="diagnosis medium">
+								<h4>Not Found (404)</h4>
+								<p><strong>Cause:</strong> The requested resource or endpoint does not exist</p>
+								<p><strong>Suggestion:</strong> Verify the endpoint URL is correct. Check if the resource ID is valid. Ensure you're using the correct API version.</p>
+								<p><strong>Category:</strong> client</p>
+							</div>
+						</div>
+                        
+                        
+						<div class="detail-group">
+							<h4>Response Body</h4>
+							<div class="detail-content">{"message":"Not Found"}
+</div>
+						</div>
+                        
+						<div class="detail-group">
+							<h4>Response Headers</h4>
+							<div class="detail-content">{
+  "Connection": "keep-alive",
+  "Content-Length": "24",
+  "Content-Type": "application/json; charset=UTF-8",
+  "Date": "Sun, 18 Jan 2026 20:31:36 GMT",
+  "Server": "nginx",
+  "Vary": "Origin"
+}</div>
+						</div>
+					</div>
+				</div>
+				<!-- ...existing test results... -->
+			</div>
+		</div>
+        
+		<div class="footer">
+			<p>Generated by API Debugging & Monitoring Toolkit</p>
+			<p>Built for Forward Deployed Engineers</p>
+		</div>
+	</div>
+    
+	<script>
+		// Auto-expand failed tests on load
+		document.addEventListener('DOMContentLoaded', function() {
+			const failedTests = document.querySelectorAll('.test-header.failure');
+			failedTests.forEach(test => {
+				test.parentElement.classList.add('expanded');
+			});
+		});
+	</script>
+</body>
+</html>
