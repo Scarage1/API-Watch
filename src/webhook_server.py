@@ -1,51 +1,25 @@
 """
 Webhook receiver server.
 Local server to receive and log webhook payloads for testing.
-Optimized for production deployment on Render.
+Production-ready for Render deployment.
 """
 import json
 import os
 import argparse
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
-from fastapi import FastAPI, Request, Response, HTTPException
+from typing import Dict, Any
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from rich.console import Console
 from rich.panel import Panel
 from rich.json import JSON
-import logging
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # Ensure logs directory exists
 Path("logs/webhooks").mkdir(parents=True, exist_ok=True)
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="API-Watch Webhook Receiver",
-    description="Production webhook receiver for API integration testing",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
-
-# Add CORS middleware for cross-origin requests
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+app = FastAPI(title="API-Watch Webhook Receiver", version="1.0.0")
 console = Console()
 
 
@@ -115,150 +89,76 @@ def display_webhook(endpoint: str, method: str, headers: Dict, body: Any) -> Non
 
 @app.get("/")
 async def root():
-    """Root endpoint with service information."""
+    """Root endpoint."""
     return {
-        "service": "API-Watch Webhook Receiver",
+        "service": "Webhook Receiver",
         "status": "running",
-        "version": "1.0.0",
-        "endpoints": {
-            "health": "/health",
-            "webhook": "/webhook (or any path)",
-            "docs": "/docs",
-            "redoc": "/redoc"
-        },
         "message": "Send webhooks to any path, e.g., POST /webhook"
     }
 
 
 @app.get("/health")
-async def health_check():
+async def health():
+    """Health check endpoint."""
+    return {"status": "healthy"}
+
+
+@app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def catch_all(request: Request, full_path: str):
     """
-    Health check endpoint for Render monitoring.
-    Returns 200 OK if service is healthy.
+    Catch-all endpoint to receive webhooks at any path.
+    
+    Args:
+        request: FastAPI request object
+        full_path: Full request path
+        
+    Returns:
+        JSON response
     """
+    # Get request details
+    method = request.method
+    headers = dict(request.headers)
+    
+    # Try to parse body as JSON
     try:
-        # Verify logs directory is accessible
-        logs_dir = Path("logs/webhooks")
-        if not logs_d with webhook details
-    """
-    try:
-        # Get request details
-        method = request.method
-        headers = dict(request.headers)
-        
-        # Try to parse body as JSON
-        body: Optional[Any] = None
-        try:
-            body = await request.json()
-        except Exception:
-            # If not JSON, try to get raw body
-            try:
-                raw_body = await request.body()
-                body = raw_body.decode('utf-8') if raw_body else None
-            except Exception as e:
-                logger.warning(f"Failed to parse request body: {str(e)}")
-                body = None
-        
-        # Log webhook
-        log_file = log_webhook(f"/{full_path}", method, headers, body)
-        logger.info(f"Webhook received: {method} /{full_path}")
-        
-        # Display in terminal (only if running locally with console)
-        try:
-            display_webhook(f"/{full_path}", method, headers, body)
-        except Exception as e:
-            # Silently fail display errors in production
-            logger.debug(f"Display webhook failed: {str(e)}")
-        
-        # Return success response
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "received",
-                "message": "Webhook received and logged successfully",
-                "log_file": log_file,
-                "timestamp": datetime.now().isoformat(),
-                "method": method,
-                "path": f"/{full_path}"
-            }
-        )
-    except Exception as e:
-        logger.error(f"Error processing webhook: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "message": "Failed to process webhook",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
-            body = await request.json()
+        body = await request.json()
     except Exception:
         # If not JSON, try to get raw body
         try:
             raw_body = await request.body()
             body = raw_body.decode('utf-8') if raw_body else None
         except Exception:
-       
-    Main entry point for webhook server.
-    Optimized for both local development and Render deployment.
-    """
-    parser = argparse.ArgumentParser(description="API-Watch Webhook Receiver Server")
-    parser.add_argument(
-        '--host',
-        default=os.getenv('HOST', '0.0.0.0'),
-        help='Host to bind (default: 0.0.0.0, required for Render)'
+            body = None
+    
+    # Log webhook
+    log_file = log_webhook(f"/{full_path}", method, headers, body)
+    
+    # Display in terminal
+    display_webhook(f"/{full_path}", method, headers, body)
+    
+    # Return success response
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "received",
+            "message": "Webhook received and logged successfully",
+            "log_file": log_file,
+            "timestamp": datetime.now().isoformat()
+        }
     )
-    parser.add_argument(
-        '--port',
-        type=int,
-        default=int(os.getenv('PORT', '8080')),
-        help='Port to bind (default: 8080, Render uses PORT env var)'
-    )
-    parser.add_argument(
-        '--reload',
-        action='store_true',
-        help='Enable auto-reload (development only)'
-    )
+
+
+def main():
+    """Main entry point for webhook server."""
+    parser = argparse.ArgumentParser(description="Webhook Receiver Server")
+    parser.add_argument('--host', default='0.0.0.0', help='Host to bind (default: 0.0.0.0)')
+    parser.add_argument('--port', type=int, default=int(os.getenv('PORT', '8080')), help='Port to bind (default: 8080)')
+    parser.add_argument('--reload', action='store_true', help='Enable auto-reload')
     
     args = parser.parse_args()
     
-    # Log startup information
-    logger.info(f"Starting API-Watch Webhook Receiver on {args.host}:{args.port}")
-    
-    # Display startup banner (only if console is available)
-    try:
-        console.print(Panel.fit(
-            f"""[bold cyan]API-Watch Webhook Receiver[/bold cyan]
-            
-[green]✓[/green] Server starting on [bold]http://{args.host}:{args.port}[/bold]
-[green]✓[/green] Webhooks will be logged to [bold]logs/webhooks/[/bold]
-[green]✓[/green] Health check available at [bold]http://{args.host}:{args.port}/health[/bold]
-[green]✓[/green] API docs available at [bold]http://{args.host}:{args.port}/docs[/bold]
-
-Press [bold red]Ctrl+C[/bold red] to stop the server""",
-            border_style="cyan"
-        ))
-        console.print("\n[dim]Waiting for webhooks...[/dim]\n")
-    except Exception:
-        # If console fails (e.g., in production), just log
-        logger.info("Webhook receiver ready to accept requests")
-    
-    try:
-        uvicorn.run(
-            "webhook_server:app",
-            host=args.host,
-            port=args.port,
-            reload=args.reload,
-            log_level="info",
-            access_log=True
-        )
-    except KeyboardInterrupt:
-        logger.info("Server stopped by user")
-        try:
-            console.print("\n[yellow]Server stopped by user[/yellow]")
-        except Exception:
-            pass
+    console.print(Panel.fit(
+        f"""[bold cyan]Webhook Receiver Server[/bold cyan]
         
 [green]✓[/green] Server starting on [bold]http://{args.host}:{args.port}[/bold]
 [green]✓[/green] Webhooks will be logged to [bold]logs/webhooks/[/bold]
