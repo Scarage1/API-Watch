@@ -33,7 +33,12 @@ app = FastAPI(
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite and React dev servers
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://api-watch-kk89.onrender.com",
+        "*"  # Allow all origins for deployed frontend
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
