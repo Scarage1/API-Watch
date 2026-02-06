@@ -219,4 +219,10 @@ async def get_stats(results: List[RequestResult]):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import os
+    
+    # Get port from environment variable (for Render, Railway, etc.) or default to 8000
+    port = int(os.getenv("PORT", 8000))
+    
+    logger.info(f"Starting API server on port {port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)

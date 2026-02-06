@@ -1,4 +1,21 @@
 services:
+  # Main API Server for Frontend
+  - type: web
+    name: api-watch-backend
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python src/api_server.py
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 10000
+      - key: PYTHON_ENV
+        value: production
+
+  # Webhook Server (Optional)
   - type: web
     name: api-watch-webhook
     env: python
