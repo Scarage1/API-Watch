@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
+import CollectionsSidebar from './CollectionsSidebar';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', section: 'main' },
@@ -96,11 +97,16 @@ export default function Sidebar() {
             ))}
           </nav>
 
+          {/* Collections */}
+          <div className="px-3 py-3 border-t border-surface-100 dark:border-surface-800 overflow-y-auto max-h-[40vh]">
+            <CollectionsSidebar />
+          </div>
+
           {/* Footer */}
           <div className="p-3 border-t border-surface-100 dark:border-surface-800">
             <div className="px-3 py-2">
               <p className="text-[11px] font-medium text-surface-400 dark:text-surface-600">
-                API-Watch v1.0
+                API-Watch v2.0
               </p>
             </div>
           </div>

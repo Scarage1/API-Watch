@@ -2,6 +2,7 @@ import { Moon, Sun, Menu, Zap, LogOut, User } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
+import EnvironmentSelector from './EnvironmentSelector';
 
 export default function Header() {
   const { darkMode, toggleDarkMode, toggleSidebar } = useAppStore();
@@ -38,8 +39,12 @@ export default function Header() {
           </div>
 
           {/* Right */}
-          <div className="flex items-center gap-1">
-            <div className="hidden sm:flex items-center gap-1.5 mr-3 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-800/30">
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:block">
+              <EnvironmentSelector />
+            </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-800/30">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-soft" />
               <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Connected</span>
             </div>

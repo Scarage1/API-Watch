@@ -1,11 +1,21 @@
-import { useState } from 'react';
-import { Send, Loader2, CheckCircle, XCircle, Copy, Check, Code2, FileJson } from 'lucide-react';
-import type { RequestConfig, RequestResult } from '../types';
-import { useAppStore } from '../store/useAppStore';
-import { cn, formatDuration, formatBytes } from '../lib/utils';
+import { useCallback, useState } from 'react';
+import {
+  Send,
+  Loader2,
+  Plus,
+  X,
+  Copy,
+} from 'lucide-react';
+import { cn } from '../lib/utils';
 import apiClient from '../lib/api';
+import { useRequestStore } from '../store/useRequestStore';
+import type { HttpMethod, KeyValuePair, TabResponse, BodyType } from '../store/useRequestStore';
+import KeyValueEditor from '../components/KeyValueEditor';
+import BodyEditor from '../components/BodyEditor';
+import ResponseViewer from '../components/ResponseViewer';
+import { useAppStore } from '../store/useAppStore';
 
-const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const;
+const HTTP_METHODS: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 
 const methodStyles: Record<string, string> = {
   GET: 'bg-emerald-600 text-white',
@@ -13,46 +23,122 @@ const methodStyles: Record<string, string> = {
   PUT: 'bg-amber-600 text-white',
   DELETE: 'bg-red-600 text-white',
   PATCH: 'bg-purple-600 text-white',
+  HEAD: 'bg-teal-600 text-white',
+  OPTIONS: 'bg-gray-600 text-white',
 };
 
-type Tab = 'headers' | 'params' | 'body';
+const methodDotColors: Record<string, string> = {
+  GET: 'bg-emerald-500',
+  POST: 'bg-blue-500',
+  PUT: 'bg-amber-500',
+  DELETE: 'bg-red-500',
+  PATCH: 'bg-purple-500',
+  HEAD: 'bg-teal-500',
+  OPTIONS: 'bg-gray-500',
+};
+
+type RequestPanel = 'params' | 'headers' | 'body';
+
+function deriveTabName(url: string, currentName: string): string {
+  if (currentName && currentName !== 'New Request' && currentName !== 'Untitled') {
+    return currentName;
+  }
+  if (!url) return 'Untitled';
+  try {
+    const u = new URL(url);
+    const path = u.pathname === '/' ? u.hostname : u.pathname;
+    return path.length > 25 ? path.slice(0, 25) : path;
+  } catch {
+    return url.length > 25 ? url.slice(0, 25) : url;
+  }
+}
 
 export default function SingleRequest() {
+  const {
+    tabs,
+    activeTabId,
+    addTab,
+    removeTab,
+    setActiveTab,
+    updateTab,
+    duplicateTab,
+    setResponse,
+    setLoading,
+    getActiveTab,
+  } = useRequestStore();
+
   const { addToHistory } = useAppStore();
-  const [config, setConfig] = useState<RequestConfig>({
-    method: 'GET',
-    url: 'https://jsonplaceholder.typicode.com/posts/1',
-    headers: {},
-    params: {},
-    body: null,
-    timeout: 10,
-  });
+  const [activePanel, setActivePanel] = useState<RequestPanel>('params');
+  const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
 
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<RequestResult | null>(null);
-  const [headersText, setHeadersText] = useState('');
-  const [paramsText, setParamsText] = useState('');
-  const [bodyText, setBodyText] = useState('');
-  const [activeTab, setActiveTab] = useState<Tab>('headers');
-  const [copied, setCopied] = useState(false);
+  const tab = getActiveTab();
 
-  const executeRequest = async () => {
-    setLoading(true);
-    setResult(null);
+  const executeRequest = useCallback(async () => {
+    if (!tab.url) return;
+    const tabId = tab.id;
+    setLoading(tabId, true);
 
     try {
-      const headers = headersText ? JSON.parse(headersText) : {};
-      const params = paramsText ? JSON.parse(paramsText) : {};
-      const body = bodyText ? JSON.parse(bodyText) : null;
-      const requestData = { ...config, headers, params, body };
+      const headers: Record<string, string> = {};
+      tab.headers
+        .filter((h) => h.enabled && h.key)
+        .forEach((h) => { headers[h.key] = h.value; });
 
-      const response = await apiClient.post('/api/execute-request', requestData);
-      const requestResult: RequestResult = response.data;
-      setResult(requestResult);
-      addToHistory(requestResult);
+      const params: Record<string, string> = {};
+      tab.params
+        .filter((p) => p.enabled && p.key)
+        .forEach((p) => { params[p.key] = p.value; });
+
+      let body: any = null;
+      if (tab.method !== 'GET' && tab.method !== 'HEAD') {
+        if (tab.bodyType === 'json') {
+          try { body = JSON.parse(tab.bodyRaw); } catch { body = tab.bodyRaw; }
+          if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+        } else if (tab.bodyType === 'text' || tab.bodyType === 'xml') {
+          body = tab.bodyRaw;
+          if (tab.bodyType === 'xml' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/xml';
+          }
+        } else if (tab.bodyType === 'form-data' || tab.bodyType === 'x-www-form-urlencoded') {
+          const formObj: Record<string, string> = {};
+          tab.bodyFormData
+            .filter((f) => f.enabled && f.key)
+            .forEach((f) => { formObj[f.key] = f.value; });
+          body = formObj;
+          if (tab.bodyType === 'x-www-form-urlencoded' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+          }
+        }
+      }
+
+      const res = await apiClient.post('/api/execute-request', {
+        method: tab.method,
+        url: tab.url,
+        headers,
+        params,
+        body,
+        timeout: tab.timeout,
+      });
+      const result = res.data;
+
+      const tabResponse: TabResponse = {
+        success: result.success,
+        status_code: result.status_code,
+        response_time: result.response_time,
+        response_size: result.response_size,
+        response_body: result.response_body,
+        response_headers: result.response_headers || {},
+        error: result.error,
+        error_type: result.error_type,
+        retry_count: result.retry_count || 0,
+        timestamp: result.timestamp || new Date().toISOString(),
+      };
+
+      setResponse(tabId, tabResponse);
+      addToHistory(result);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Request failed';
-      const errorResult: RequestResult = {
+      setResponse(tab.id, {
         success: false,
         status_code: null,
         response_time: 0,
@@ -63,259 +149,216 @@ export default function SingleRequest() {
         error_type: 'CLIENT_ERROR',
         retry_count: 0,
         timestamp: new Date().toISOString(),
-        request_method: config.method,
-        request_url: config.url,
-      };
-      setResult(errorResult);
-    } finally {
-      setLoading(false);
+      });
     }
-  };
+  }, [tab, setLoading, setResponse, addToHistory]);
 
-  const copyResponse = () => {
-    if (result?.response_body) {
-      navigator.clipboard.writeText(result.response_body);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
+  const update = (updates: Partial<typeof tab>) => updateTab(tab.id, updates);
 
-  const formatResponseBody = (body: string): string => {
-    try {
-      return JSON.stringify(JSON.parse(body), null, 2);
-    } catch {
-      return body;
-    }
-  };
+  const enabledParamsCount = tab.params.filter((p) => p.enabled && p.key).length;
+  const enabledHeadersCount = tab.headers.filter((h) => h.enabled && h.key).length;
 
-  const tabs: { id: Tab; label: string; show: boolean }[] = [
-    { id: 'headers', label: 'Headers', show: true },
-    { id: 'params', label: 'Params', show: true },
-    { id: 'body', label: 'Body', show: config.method !== 'GET' },
+  const panels: { id: RequestPanel; label: string; count?: number }[] = [
+    { id: 'params', label: 'Params', count: enabledParamsCount },
+    { id: 'headers', label: 'Headers', count: enabledHeadersCount },
+    { id: 'body', label: 'Body' },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="section-title">Request Builder</h1>
-        <p className="section-subtitle">Execute and debug individual API requests</p>
+    <div className="flex flex-col h-[calc(100vh-7rem)]">
+      {/* Tab Bar */}
+      <div className="flex items-center gap-0.5 px-1 py-1 bg-surface-100 dark:bg-surface-900 rounded-xl mb-3 overflow-x-auto">
+        {tabs.map((t) => (
+          <div
+            key={t.id}
+            className="relative group"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenuTab(t.id === contextMenuTab ? null : t.id);
+            }}
+          >
+            <button
+              onClick={() => setActiveTab(t.id)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap',
+                t.id === activeTabId
+                  ? 'bg-white dark:bg-surface-800 text-surface-900 dark:text-white shadow-sm'
+                  : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 hover:bg-surface-200/50 dark:hover:bg-surface-800/50'
+              )}
+            >
+              <div className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', methodDotColors[t.method] || 'bg-gray-400')} />
+              <span className="max-w-[120px] truncate">{t.name || 'Untitled'}</span>
+              {t.isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />}
+              <button
+                onClick={(e) => { e.stopPropagation(); removeTab(t.id); }}
+                className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-200 dark:hover:bg-surface-700 transition-opacity"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </button>
+
+            {contextMenuTab === t.id && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setContextMenuTab(null)} />
+                <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl shadow-lg py-1 min-w-[140px]">
+                  <button
+                    onClick={() => { duplicateTab(t.id); setContextMenuTab(null); }}
+                    className="w-full px-3 py-1.5 text-left text-xs text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700/50 flex items-center gap-2"
+                  >
+                    <Copy className="w-3 h-3" /> Duplicate
+                  </button>
+                  <button
+                    onClick={() => { removeTab(t.id); setContextMenuTab(null); }}
+                    className="w-full px-3 py-1.5 text-left text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2"
+                  >
+                    <X className="w-3 h-3" /> Close
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+
+        <button
+          onClick={() => addTab()}
+          className="p-1.5 rounded-lg text-surface-400 hover:text-surface-600 hover:bg-surface-200/50 dark:hover:bg-surface-800/50 transition-colors flex-shrink-0"
+          title="New tab"
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {/* Request Builder */}
-        <div className="space-y-4">
-          {/* URL Bar */}
-          <div className="card !p-4">
-            <div className="flex gap-2">
-              <select
-                value={config.method}
-                onChange={(e) => setConfig({ ...config, method: e.target.value as RequestConfig['method'] })}
+      {/* URL Bar */}
+      <div className="card !p-3 mb-3">
+        <div className="flex gap-2">
+          <select
+            value={tab.method}
+            onChange={(e) => update({ method: e.target.value as HttpMethod })}
+            className={cn(
+              'px-3 py-2.5 rounded-xl text-xs font-bold tracking-wide appearance-none cursor-pointer min-w-[90px]',
+              'focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-colors',
+              methodStyles[tab.method]
+            )}
+          >
+            {HTTP_METHODS.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+
+          <input
+            type="text"
+            value={tab.url}
+            onChange={(e) => update({ url: e.target.value, name: deriveTabName(e.target.value, tab.name) })}
+            onKeyDown={(e) => { if (e.key === 'Enter') executeRequest(); }}
+            placeholder="https://api.example.com/endpoint"
+            className="input flex-1 font-mono text-sm"
+          />
+
+          <button
+            onClick={executeRequest}
+            disabled={tab.isLoading || !tab.url}
+            className="btn-primary !px-5"
+          >
+            {tab.isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">Send</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Request / Response split */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 flex-1 min-h-0">
+        {/* Left: Request config */}
+        <div className="card !p-0 overflow-hidden flex flex-col min-h-[300px]">
+          <div className="flex border-b border-surface-100 dark:border-surface-700/50">
+            {panels.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setActivePanel(p.id)}
                 className={cn(
-                  'px-3 py-2.5 rounded-xl text-xs font-bold tracking-wide appearance-none cursor-pointer',
-                  'focus:outline-none focus:ring-2 focus:ring-brand-500/20',
-                  'transition-colors',
-                  methodStyles[config.method]
+                  'px-4 py-2.5 text-xs font-medium transition-colors relative',
+                  activePanel === p.id
+                    ? 'text-brand-600 dark:text-brand-400'
+                    : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
                 )}
               >
-                {HTTP_METHODS.map((method) => (
-                  <option key={method} value={method}>{method}</option>
-                ))}
-              </select>
-
-              <input
-                type="text"
-                value={config.url}
-                onChange={(e) => setConfig({ ...config, url: e.target.value })}
-                placeholder="https://api.example.com/endpoint"
-                className="input flex-1 font-mono text-sm"
-              />
-
-              <button
-                onClick={executeRequest}
-                disabled={loading || !config.url}
-                className="btn-primary !px-5"
-              >
-                {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
+                {p.label}
+                {p.count !== undefined && p.count > 0 && (
+                  <span className="ml-1 text-[10px] font-bold text-brand-500">({p.count})</span>
+                )}
+                {activePanel === p.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
                 )}
               </button>
+            ))}
+
+            <div className="ml-auto flex items-center gap-1.5 pr-3">
+              <span className="text-[10px] text-surface-400">Timeout</span>
+              <input
+                type="number"
+                value={tab.timeout}
+                onChange={(e) => update({ timeout: parseInt(e.target.value) || 10 })}
+                className="input !w-14 !py-1 text-center text-xs"
+                min={1}
+                max={120}
+              />
+              <span className="text-[10px] text-surface-400">s</span>
             </div>
           </div>
 
-          {/* Tabs + Content */}
-          <div className="card !p-0 overflow-hidden">
-            {/* Tab bar */}
-            <div className="flex border-b border-surface-100 dark:border-surface-700/50">
-              {tabs.filter(t => t.show).map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'px-4 py-3 text-xs font-medium transition-colors relative',
-                    activeTab === tab.id
-                      ? 'text-brand-600 dark:text-brand-400'
-                      : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
-                  )}
-                >
-                  {tab.label}
-                  {activeTab === tab.id && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Tab Content */}
-            <div className="p-4">
-              {activeTab === 'headers' && (
-                <textarea
-                  value={headersText}
-                  onChange={(e) => setHeadersText(e.target.value)}
-                  placeholder='{"Content-Type": "application/json", "Authorization": "Bearer ..."}'
-                  className="input font-mono text-xs !rounded-xl"
-                  rows={5}
-                />
-              )}
-              {activeTab === 'params' && (
-                <textarea
-                  value={paramsText}
-                  onChange={(e) => setParamsText(e.target.value)}
-                  placeholder='{"page": "1", "limit": "10"}'
-                  className="input font-mono text-xs !rounded-xl"
-                  rows={5}
-                />
-              )}
-              {activeTab === 'body' && config.method !== 'GET' && (
-                <textarea
-                  value={bodyText}
-                  onChange={(e) => setBodyText(e.target.value)}
-                  placeholder='{"key": "value"}'
-                  className="input font-mono text-xs !rounded-xl"
-                  rows={8}
-                />
-              )}
-            </div>
-
-            {/* Timeout */}
-            <div className="px-4 pb-4 flex items-center gap-3">
-              <label className="text-xs font-medium text-surface-500">Timeout</label>
-              <input
-                type="number"
-                value={config.timeout}
-                onChange={(e) => setConfig({ ...config, timeout: parseInt(e.target.value) || 10 })}
-                className="input !w-20 text-center text-xs"
-                min="1"
-                max="120"
+          <div className="flex-1 overflow-auto p-4">
+            {activePanel === 'params' && (
+              <KeyValueEditor
+                pairs={tab.params}
+                onChange={(pairs: KeyValuePair[]) => update({ params: pairs })}
+                keyPlaceholder="Parameter"
+                valuePlaceholder="Value"
               />
-              <span className="text-xs text-surface-400">seconds</span>
-            </div>
+            )}
+
+            {activePanel === 'headers' && (
+              <KeyValueEditor
+                pairs={tab.headers}
+                onChange={(pairs: KeyValuePair[]) => update({ headers: pairs })}
+                keyPlaceholder="Header"
+                valuePlaceholder="Value"
+              />
+            )}
+
+            {activePanel === 'body' && (
+              <BodyEditor
+                method={tab.method}
+                bodyType={tab.bodyType}
+                bodyRaw={tab.bodyRaw}
+                bodyFormData={tab.bodyFormData}
+                onBodyTypeChange={(bt: BodyType) => update({ bodyType: bt })}
+                onBodyRawChange={(raw: string) => update({ bodyRaw: raw })}
+                onBodyFormDataChange={(fd: KeyValuePair[]) => update({ bodyFormData: fd })}
+              />
+            )}
           </div>
         </div>
 
-        {/* Response Panel */}
-        <div className="space-y-4">
-          {result ? (
-            <>
-              {/* Status Card */}
-              <div className={cn(
-                'card !p-4 border-l-4',
-                result.success ? 'border-l-emerald-500' : 'border-l-red-500'
-              )}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    {result.success ? (
-                      <CheckCircle className="w-5 h-5 text-emerald-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-red-500" />
-                    )}
-                    <span className="text-sm font-semibold text-surface-900 dark:text-white">
-                      {result.success ? 'Request Successful' : 'Request Failed'}
-                    </span>
-                  </div>
-                  <span className={cn(
-                    'text-lg font-bold tabular-nums',
-                    result.success ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-                  )}>
-                    {result.status_code || 'ERR'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: 'Time', value: formatDuration(result.response_time * 1000) },
-                    { label: 'Size', value: formatBytes(result.response_size) },
-                    { label: 'Retries', value: String(result.retry_count) },
-                  ].map((item) => (
-                    <div key={item.label} className="bg-surface-50 dark:bg-surface-900/50 rounded-xl px-3 py-2 text-center">
-                      <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wide">{item.label}</p>
-                      <p className="text-sm font-semibold text-surface-900 dark:text-white tabular-nums mt-0.5">{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {result.error && (
-                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 rounded-xl">
-                    <p className="text-xs font-medium text-red-700 dark:text-red-400">{result.error}</p>
-                    {result.error_type && (
-                      <p className="text-[10px] text-red-500 dark:text-red-500 mt-1">Type: {result.error_type}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Response Body */}
-              {result.response_body && (
-                <div className="card !p-0 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-surface-100 dark:border-surface-700/50">
-                    <div className="flex items-center gap-2">
-                      <FileJson className="w-3.5 h-3.5 text-surface-400" />
-                      <span className="text-xs font-medium text-surface-600 dark:text-surface-400">Response Body</span>
-                    </div>
-                    <button onClick={copyResponse} className="btn-ghost !p-1.5 !rounded-lg">
-                      {copied ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-500" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  <pre className="code-block !rounded-none !border-0 max-h-80 overflow-y-auto text-xs leading-relaxed">
-                    {formatResponseBody(result.response_body)}
-                  </pre>
-                </div>
-              )}
-
-              {/* Response Headers */}
-              {Object.keys(result.response_headers).length > 0 && (
-                <div className="card !p-0 overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-3 border-b border-surface-100 dark:border-surface-700/50">
-                    <Code2 className="w-3.5 h-3.5 text-surface-400" />
-                    <span className="text-xs font-medium text-surface-600 dark:text-surface-400">
-                      Response Headers ({Object.keys(result.response_headers).length})
-                    </span>
-                  </div>
-                  <div className="divide-y divide-surface-100 dark:divide-surface-800/50">
-                    {Object.entries(result.response_headers).map(([key, value]) => (
-                      <div key={key} className="flex items-start justify-between gap-4 px-4 py-2.5 text-xs">
-                        <span className="font-medium text-surface-600 dark:text-surface-300 flex-shrink-0">{key}</span>
-                        <span className="font-mono text-surface-500 dark:text-surface-400 text-right truncate">{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
+        {/* Right: Response */}
+        <div className="card !p-0 overflow-hidden flex flex-col min-h-[300px]">
+          {tab.isLoading ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+              <p className="text-xs text-surface-400">Sending request...</p>
+            </div>
+          ) : tab.response ? (
+            <ResponseViewer response={tab.response} />
           ) : (
-            <div className="card empty-state py-20">
-              <div className="w-12 h-12 rounded-2xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center mb-4">
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center">
                 <Send className="w-5 h-5 text-surface-400" />
               </div>
-              <h3 className="empty-state-title">Ready to send</h3>
-              <p className="empty-state-desc">
-                Configure your request and hit send to see the response
+              <p className="text-sm font-medium text-surface-500">Ready to send</p>
+              <p className="text-xs text-surface-400">
+                Enter a URL and hit Enter or click Send
               </p>
             </div>
           )}
