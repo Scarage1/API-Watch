@@ -3,6 +3,7 @@ API Server for API-Watch Frontend.
 FastAPI server providing REST endpoints for the React frontend.
 """
 import sys
+import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
@@ -10,13 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add src to path for absolute imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from auth import AuthHandler, create_auth_from_config
-from retry import RetryConfig
-from runner import APIRunner, RequestConfig, RequestResult
-from diagnose import DiagnosisEngine
+from src.auth import AuthHandler, create_auth_from_config
+from src.retry import RetryConfig
+from src.runner import APIRunner, RequestConfig, RequestResult
+from src.diagnose import DiagnosisEngine
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
