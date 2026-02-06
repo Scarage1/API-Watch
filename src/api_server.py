@@ -10,7 +10,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
@@ -237,16 +238,51 @@ async def get_stats(results: List[RequestResult]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Root endpoint
-@app.get("/")
-async def root():
-    """Root endpoint with service info."""
-    return {
-        "service": "API-Watch Server",
-        "status": "running",
-        "version": "1.0.0",
-        "endpoints": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats", "/health"],
-    }
+# Root endpoint - REMOVED, replaced with SPA serving below
+# @app.get("/")
+# async def root():
+#     """Root endpoint with service info."""
+#     return {
+#         "service": "API-Watch Server",
+#         "status": "running",
+#         "version": "1.0.0",
+#         "endpoints": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats", "/health"],
+#     }
+
+
+# Mount static files from frontend/dist (if it exists)
+frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+if frontend_dist.exists():
+    # Serve static assets (JS, CSS, images, etc.)
+    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+    
+    # SPA fallback - serve index.html for all non-API/webhook routes
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve React SPA for all non-API routes."""
+        # Skip if it's an API or webhook route (already handled above)
+        if full_path.startswith("api/") or full_path.startswith("webhook"):
+            pass  # Let other routes handle it
+        
+        # If path looks like a file (has extension), try to serve it
+        if "." in full_path.split("/")[-1]:
+            file_path = frontend_dist / full_path
+            if file_path.exists():
+                return FileResponse(file_path)
+        
+        # Otherwise serve index.html (SPA fallback)
+        return FileResponse(frontend_dist / "index.html")
+else:
+    # If no frontend dist, keep the API info endpoint
+    @app.get("/")
+    async def root():
+        """Root endpoint with service info."""
+        return {
+            "service": "API-Watch Server",
+            "status": "running",
+            "version": "1.0.0",
+            "endpoints": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats", "/health"],
+        }
 
 
 # Webhook catch-all (must be LAST so /api/* routes take priority)
