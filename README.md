@@ -6,8 +6,8 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub stars](https://img.shields.io/github/stars/yourusername/api-watch.svg?style=social)](https://github.com/yourusername/api-watch/stargazers)
-[![Last commit](https://img.shields.io/github/last-commit/yourusername/api-watch.svg)](https://github.com/yourusername/api-watch/commits/main)
+[![GitHub stars](https://img.shields.io/github/stars/Scarage1/API-Watch.svg?style=social)](https://github.com/Scarage1/API-Watch/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/Scarage1/API-Watch.svg)](https://github.com/Scarage1/API-Watch/commits/main)
 
 **API-Watch** is a production-ready CLI toolkit that helps Forward Deployed Engineers, Customer Success teams, and API integrators test, debug, and validate customer API integrations with intelligent retry logic, automated error diagnosis, and beautiful reporting.
 
@@ -16,6 +16,7 @@
 ## 🌟 Features
 
 ### Core Capabilities
+✅ **React Dashboard** - Modern React 19 frontend with dark mode, charts, and real-time testing  
 ✅ **API Request Runner** - Supports GET, POST, PUT, DELETE with full configuration  
 ✅ **Smart Authentication** - Bearer Token, API Key, and Basic Auth support  
 ✅ **Intelligent Retry Logic** - Exponential backoff for 429 rate limits and 5xx server errors  
@@ -24,6 +25,7 @@
 ✅ **Report Generation** - Beautiful HTML dashboards and machine-readable JSON reports  
 ✅ **YAML Test Suites** - Define and run complete onboarding validation workflows  
 ✅ **Webhook Test Server** - Local FastAPI server to receive and log webhook payloads  
+✅ **Docker Ready** - Full Docker Compose setup for one-command deployment  
 
   
 ---
@@ -86,8 +88,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/api-debug-toolkit.git
-cd api-debug-toolkit
+git clone https://github.com/Scarage1/API-Watch.git
+cd API-Watch
 
 # Create virtual environment
 python -m venv venv
@@ -118,13 +120,11 @@ cp examples/env.sample .env
 
 ### Terminal Output
 
-![Terminal Output](docs/screenshots/terminal-output.png)
-*Live terminal output showing test execution with color-coded status indicators*
-> **Note:** Screenshot placeholders - Run `python src/main.py suite --file examples/customer_onboarding_suite.yaml` and capture your terminal to add actual screenshots. See [docs/screenshots/PLACEHOLDER.md](docs/screenshots/PLACEHOLDER.md) for instructions.
+Run the toolkit and see color-coded status indicators, response times, and diagnostics right in your terminal.
+
 ### HTML Report
 
-![HTML Report](docs/screenshots/html-report.png)
-*Beautiful HTML dashboard with test results, diagnostics, and troubleshooting steps*
+Beautiful HTML dashboard with test results, diagnostics, and troubleshooting steps.
 
 **Key Report Features:**
 - ✅ Pass/Fail status for each test
@@ -479,21 +479,28 @@ Generated after each test suite run:
 
 ## 🛠️ Tech Stack
 
-**Core Technologies:**
+**Backend:**
 - **Python 3.11+** - Modern Python with type hints
+- **FastAPI** - High-performance async API framework
 - **requests** - Industry-standard HTTP client
 - **pyyaml** - YAML parsing for test suite configuration
 - **rich** - Beautiful terminal UI with colors and progress bars
 - **jinja2** - HTML report templating
-- **fastapi** - Async webhook server framework
 - **uvicorn** - ASGI server for FastAPI
-- **pytest** - Testing framework
 
-**Why These Choices:**
-- **Lightweight**: Minimal dependencies, fast installation
-- **Reliable**: Battle-tested libraries used in production
-- **Extensible**: Easy to add new features and integrations
-- **Cross-platform**: Works on Windows, macOS, and Linux
+**Frontend:**
+- **React 19** - Latest React with hooks
+- **TypeScript 5.9** - Type-safe development
+- **Vite 7** - Lightning-fast build tool
+- **Tailwind CSS 3** - Utility-first CSS framework
+- **Zustand** - Lightweight state management
+- **Recharts** - Composable charting library
+- **Axios** - Promise-based HTTP client
+
+**DevOps:**
+- **Docker** - Containerized deployment
+- **Nginx** - Production reverse proxy
+- **Render** - Cloud deployment platform
 
 ---
 
@@ -502,33 +509,39 @@ Generated after each test suite run:
 ```
 api-watch/
 ├─ src/
-│  ├─ main.py              # CLI entry point with argparse
-│  ├─ runner.py            # API request executor with retry logic
-│  ├─ auth.py              # Authentication handlers (Bearer, API Key, Basic)
-│  ├─ retry.py             # Retry logic with exponential backoff
-│  ├─ diagnose.py          # Error diagnosis engine
-│  ├─ report.py            # HTML/JSON report generation
-│  ├─ utils.py             # Utility functions (logging, validation)
-│  └─ webhook_server.py    # FastAPI webhook receiver
-├─ tests/
-│  ├─ test_runner.py       # Unit tests for request runner
-│  ├─ test_auth.py         # Authentication tests
-│  └─ test_diagnose.py     # Diagnosis engine tests
+│  ├─ __init__.py            # Package init with exports
+│  ├─ main.py                # CLI entry point with argparse
+│  ├─ api_server.py          # FastAPI backend for React frontend
+│  ├─ runner.py              # API request executor with retry logic
+│  ├─ auth.py                # Authentication handlers (Bearer, API Key, Basic)
+│  ├─ retry.py               # Retry logic with exponential backoff
+│  ├─ diagnose.py            # Error diagnosis engine
+│  ├─ report.py              # HTML/JSON report generation
+│  ├─ utils.py               # Utility functions
+│  └─ webhook_server.py      # FastAPI webhook receiver
+├─ frontend/
+│  ├─ src/
+│  │  ├─ components/         # Layout, Header, Sidebar
+│  │  ├─ pages/              # Dashboard, SingleRequest, TestSuites, etc.
+│  │  ├─ lib/                # API client, utilities
+│  │  ├─ store/              # Zustand state management
+│  │  └─ types/              # TypeScript interfaces
+│  ├─ package.json
+│  ├─ tailwind.config.js
+│  └─ vite.config.ts
 ├─ examples/
 │  ├─ test_suite.yaml              # Sample test suite
-│  ├─ customer_onboarding_suite.yaml  # FDE customer onboarding tests
+│  ├─ customer_onboarding_suite.yaml
 │  ├─ env.sample                   # Environment variables template
 │  └─ sample_payload.json          # Sample request payload
-├─ reports/                # Generated HTML/JSON reports
-├─ logs/                   # Request/response logs
-├─ docs/
-│  ├─ screenshots/         # Documentation screenshots
-│  ├─ DEPLOYMENT.md        # Detailed deployment guide
-│  └─ QUICK_DEPLOY.md      # 10-minute deployment checklist
-├─ README.md               # This file
-├─ requirements.txt        # Python dependencies
-├─ .env.example            # Environment template
-├─ .gitignore
+├─ tests/                    # Test directory
+├─ Dockerfile.backend        # Backend Docker image
+├─ Dockerfile.frontend       # Frontend Docker image
+├─ docker-compose.yml        # Full stack Docker setup
+├─ nginx.conf                # Production Nginx config
+├─ render.yaml               # Render.com deployment config
+├─ README.md
+├─ requirements.txt
 └─ LICENSE
 ```
 

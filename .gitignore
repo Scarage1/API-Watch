@@ -34,8 +34,7 @@ ENV/
 *~
 
 # Logs
-logs/*.log
-logs/*.txt
+logs/
 
 # Reports (keep sample for deployment)
 reports/*.html
@@ -48,9 +47,15 @@ reports/*.json
 # !public/index.html
 # !public/report.html
 
+# Node / Vite
+.vite/
+node_modules/
+frontend/dist/
+
 # Environment variables
 .env
 .env.local
+.env.*.local
 
 # OS
 .DS_Store

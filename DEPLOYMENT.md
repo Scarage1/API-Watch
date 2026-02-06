@@ -167,7 +167,77 @@ services:
         value: https://api-watch-backend.onrender.com
 ```
 
-#### B. Vercel + Railway
+#### B. Azure (Recommended for Production)
+
+**Backend: Azure App Service**
+```bash
+# Login to Azure CLI
+az login
+
+# Create resource group
+az group create --name api-watch-rg --location eastus
+
+# Create App Service plan
+az appservice plan create --name api-watch-plan --resource-group api-watch-rg --sku B1 --is-linux
+
+# Create web app (Python)
+az webapp create --resource-group api-watch-rg --plan api-watch-plan \
+  --name api-watch-backend --runtime "PYTHON:3.11"
+
+# Configure startup command
+az webapp config set --resource-group api-watch-rg --name api-watch-backend \
+  --startup-file "startup.sh"
+
+# Set environment variables
+az webapp config appsettings set --resource-group api-watch-rg --name api-watch-backend \
+  --settings PYTHON_ENV=production LOG_LEVEL=INFO
+
+# Deploy from local git (or configure GitHub Actions)
+az webapp deployment source config-local-git --resource-group api-watch-rg --name api-watch-backend
+
+# Push to Azure
+git remote add azure <deployment-url-from-above>
+git push azure main
+```
+
+> **Note:** Azure App Service automatically sets the `PORT` environment variable. The backend reads it via `os.getenv("PORT", 8000)`.
+
+**Backend: Azure Container Instances (Docker)**
+```bash
+# Build and push to Azure Container Registry
+az acr create --resource-group api-watch-rg --name apiwatchregistry --sku Basic
+az acr login --name apiwatchregistry
+
+docker build -f Dockerfile.backend -t apiwatchregistry.azurecr.io/api-watch-backend:latest .
+docker push apiwatchregistry.azurecr.io/api-watch-backend:latest
+
+# Deploy container
+az container create --resource-group api-watch-rg --name api-watch-backend \
+  --image apiwatchregistry.azurecr.io/api-watch-backend:latest \
+  --dns-name-label api-watch-backend \
+  --ports 8000 \
+  --environment-variables PORT=8000 PYTHON_ENV=production
+```
+
+**Frontend: Azure Static Web Apps**
+```bash
+# Build frontend with production API URL
+cd frontend
+VITE_API_URL=https://api-watch-backend.azurewebsites.net npm run build
+
+# Deploy to Azure Static Web Apps
+az staticwebapp create --name api-watch-frontend --resource-group api-watch-rg \
+  --source . --location eastus2 --branch main \
+  --app-location "/frontend" --output-location "dist" --build-preset "vite"
+```
+
+Alternatively, use Docker:
+```bash
+docker build -f Dockerfile.frontend -t api-watch-frontend:latest \
+  --build-arg VITE_API_URL=https://api-watch-backend.azurewebsites.net .
+```
+
+#### C. Vercel + Railway
 
 **Frontend on Vercel**
 ```bash

@@ -8,17 +8,17 @@ export default function Layout() {
   const { sidebarOpen } = useAppStore();
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-950 pt-14">
       <Header />
       <Sidebar />
-      
+
       <main
         className={cn(
-          "pt-16 transition-all duration-300",
-          sidebarOpen ? "lg:pl-64" : "pl-0"
+          'transition-all duration-300 ease-in-out',
+          sidebarOpen ? 'lg:pl-56' : 'pl-0'
         )}
       >
-        <div className="p-4 sm:p-6 lg:p-8">
+        <div className="p-4 sm:p-6 max-w-7xl mx-auto animate-fade-in">
           <Outlet />
         </div>
       </main>

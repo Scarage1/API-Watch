@@ -250,7 +250,7 @@ def create_runner_from_config(
     Returns:
         Configured APIRunner
     """
-    from auth import create_auth_from_config
+    from .auth import create_auth_from_config
     
     # Create auth handler
     auth_handler = None

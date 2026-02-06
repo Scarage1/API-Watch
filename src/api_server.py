@@ -1,12 +1,16 @@
 """
 API Server for API-Watch Frontend.
 FastAPI server providing REST endpoints for the React frontend.
+Also includes webhook receiver functionality.
 """
 import sys
 import os
+import json
 from pathlib import Path
+from datetime import datetime
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
@@ -23,6 +27,9 @@ from src.diagnose import DiagnosisEngine
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Ensure webhook logs directory exists
+Path("logs/webhooks").mkdir(parents=True, exist_ok=True)
+
 # Create FastAPI app
 app = FastAPI(
     title="API-Watch Server",
@@ -33,13 +40,8 @@ app = FastAPI(
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://api-watch-kk89.onrender.com",
-        "*"  # Allow all origins for deployed frontend
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -217,10 +219,79 @@ async def get_stats(results: List[RequestResult]):
     """
     try:
         summary = DiagnosisEngine.get_summary(results)
+        # Convert Diagnosis dataclass objects to dicts for JSON serialization
+        if "diagnoses" in summary:
+            summary["diagnoses"] = [
+                {
+                    "issue": d.issue,
+                    "cause": d.cause,
+                    "suggestion": d.suggestion,
+                    "severity": d.severity,
+                    "category": d.category,
+                }
+                for d in summary["diagnoses"]
+            ]
         return summary
     except Exception as e:
         logger.exception("Error calculating stats")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint with service info."""
+    return {
+        "service": "API-Watch Server",
+        "status": "running",
+        "version": "1.0.0",
+        "endpoints": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats", "/health"],
+    }
+
+
+# Webhook catch-all (must be LAST so /api/* routes take priority)
+@app.api_route("/webhook/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route("/webhook", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def webhook_catch_all(request: Request):
+    """
+    Catch-all webhook receiver. Send webhooks to /webhook or /webhook/<any-path>.
+    """
+    method = request.method
+    headers = dict(request.headers)
+
+    try:
+        body = await request.json()
+    except Exception:
+        try:
+            raw_body = await request.body()
+            body = raw_body.decode("utf-8") if raw_body else None
+        except Exception:
+            body = None
+
+    # Log webhook
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = Path("logs/webhooks") / f"webhook_{timestamp}.json"
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "endpoint": str(request.url.path),
+        "method": method,
+        "headers": headers,
+        "body": body,
+    }
+    with open(log_file, "w") as f:
+        json.dump(log_data, f, indent=2, default=str)
+
+    logger.info(f"Webhook received: {method} {request.url.path}")
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "received",
+            "message": "Webhook received and logged successfully",
+            "log_file": str(log_file),
+            "timestamp": datetime.now().isoformat(),
+        },
+    )
 
 
 if __name__ == "__main__":

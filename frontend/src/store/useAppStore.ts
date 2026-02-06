@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { RequestResult, TestSuite, TestExecutionProgress } from '../types';
+import type { RequestResult, TestSuite, TestExecutionProgress } from '../types';
 
 interface AppState {
   // Current test execution

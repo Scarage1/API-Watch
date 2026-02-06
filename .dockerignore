@@ -1,0 +1,44 @@
+# Version Control
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+env/
+
+# Node
+frontend/node_modules/
+frontend/.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & Reports
+logs/
+reports/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+frontend/dist/
