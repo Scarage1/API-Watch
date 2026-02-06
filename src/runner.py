@@ -1,11 +1,19 @@
 """
 API request runner module.
 Executes HTTP requests with authentication, retry logic, and detailed logging.
+Supports both sync (requests) and async (httpx) execution.
 """
 import time
+import asyncio
 import logging
 from typing import Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
+
+try:
+    import httpx
+except ImportError:
+    httpx = None  # type: ignore
+
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError
 
@@ -229,8 +237,128 @@ class APIRunner:
         else:
             self.logger.warning(f"{log_msg} | Error: {result.error}")
     
+    async def execute_async(self, config: RequestConfig) -> RequestResult:
+        """
+        Execute an API request asynchronously using httpx.
+        
+        Args:
+            config: Request configuration
+            
+        Returns:
+            RequestResult with response details
+        """
+        if httpx is None:
+            raise ImportError("httpx is required for async execution. Install with: pip install httpx")
+
+        self.retry_handler.reset()
+        result = None
+
+        while True:
+            result = await self._execute_single_request_async(config)
+            self._log_request(config, result)
+
+            if not result.success and self.retry_handler.should_retry(
+                status_code=result.status_code,
+                exception=Exception(result.error) if result.error else None
+            ):
+                self.retry_handler.increment_retry()
+                retry_delay = self.retry_handler.get_delay()
+                self.logger.info(
+                    f"Retry {self.retry_handler.get_retry_count()}/"
+                    f"{self.retry_handler.config.max_retries} after {retry_delay:.1f}s "
+                    f"(Status: {result.status_code}, Error: {result.error_type})"
+                )
+                await asyncio.sleep(retry_delay)
+            else:
+                break
+
+        result.retry_count = self.retry_handler.get_retry_count()
+        return result
+
+    async def _execute_single_request_async(self, config: RequestConfig) -> RequestResult:
+        """
+        Execute a single API request asynchronously without retry.
+        """
+        result = RequestResult(
+            success=False,
+            request_method=config.method.upper(),
+            request_url=config.url,
+            request_headers=config.headers.copy(),
+            request_body=str(config.body) if config.body else None
+        )
+
+        try:
+            headers = config.headers.copy()
+            if self.auth_handler and self.auth_handler.is_configured():
+                auth_headers = self.auth_handler.get_auth_headers()
+                headers.update(auth_headers)
+
+            result.request_headers = headers.copy()
+
+            # Prepare auth for basic auth
+            auth = None
+            if self.auth_handler and self.auth_handler.get_auth_type() == "basic":
+                creds = self.auth_handler.get_basic_auth_tuple()
+                if creds:
+                    auth = httpx.BasicAuth(creds[0], creds[1])
+
+            start_time = time.time()
+
+            async with httpx.AsyncClient(
+                timeout=config.timeout,
+                verify=config.verify_ssl,
+                follow_redirects=config.allow_redirects,
+            ) as client:
+                response = await client.request(
+                    method=config.method.upper(),
+                    url=config.url,
+                    headers=headers,
+                    params=config.params,
+                    json=config.body if config.body else None,
+                    auth=auth,
+                )
+
+            end_time = time.time()
+
+            result.status_code = response.status_code
+            result.response_time = end_time - start_time
+            result.response_headers = dict(response.headers)
+            result.response_size = len(response.content)
+
+            try:
+                result.response_body = response.text
+            except Exception:
+                result.response_body = "<binary data>"
+
+            result.success = response.is_success
+            if not result.success:
+                result.error = f"HTTP {response.status_code}"
+                result.error_type = "HTTP_ERROR"
+
+        except httpx.TimeoutException as e:
+            result.error = "Request timeout"
+            result.error_type = "TIMEOUT"
+            self.logger.error(f"Timeout error: {str(e)}")
+
+        except httpx.ConnectError as e:
+            result.error = "Connection error"
+            result.error_type = "CONNECTION_ERROR"
+            self.logger.error(f"Connection error: {str(e)}")
+
+        except httpx.HTTPError as e:
+            result.error = str(e)
+            result.error_type = "REQUEST_ERROR"
+            self.logger.error(f"HTTP error: {str(e)}")
+
+        except Exception as e:
+            result.error = str(e)
+            result.error_type = "UNKNOWN_ERROR"
+            self.logger.error(f"Unexpected error: {str(e)}")
+
+        return result
+
     def close(self) -> None:
-        """Close the session."""
+        """Close the sync session."""
         self.session.close()
 
 
