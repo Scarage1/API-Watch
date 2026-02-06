@@ -1,68 +1,32 @@
-# Contributing to APIWatch
+# Contributing
 
-Thank you for your interest in contributing to APIWatch! 🎉
+## Getting Started
 
-## How to Contribute
-
-### Reporting Bugs 🐛
-
-Found a bug? Please open an issue with:
-- Clear description of the problem
-- Steps to reproduce
-- Expected vs actual behavior
-- Your environment (OS, Python version)
-
-### Suggesting Features 💡
-
-Have an idea? Open an issue with:
-- Feature description
-- Use case / problem it solves
-- Proposed implementation (optional)
-
-### Submitting Code 🔧
-
-1. **Fork the repository**
-2. **Create a feature branch**
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-3. **Make your changes**
-   - Follow existing code style
-   - Add tests if applicable
-   - Update documentation
-
-4. **Commit with clear messages**
-   ```bash
-   git commit -m "feat: add OAuth2 authentication support"
-   ```
-
-5. **Push and create a Pull Request**
-   ```bash
-   git push origin feature/amazing-feature
-   ```
+1. Fork the repo
+2. Create a branch: `git checkout -b feature/your-feature`
+3. Make changes
+4. Run tests: `pytest` and `cd frontend && npm test`
+5. Commit: `git commit -m "feat: description"`
+6. Push and open a PR
 
 ## Code Style
 
-- Use type hints
-- Follow PEP 8
-- Add docstrings to functions
-- Keep functions focused and modular
+- **Python:** PEP 8, type hints, docstrings
+- **TypeScript:** ESLint config in `frontend/eslint.config.js`
+- **Commits:** Use conventional commits (`feat:`, `fix:`, `docs:`, `test:`)
 
 ## Testing
 
-Before submitting:
-```bash
-# Test installation
-python test_installation.py
+All PRs must pass the existing test suite:
 
-# Test basic functionality
-python src/main.py request --method GET --url https://jsonplaceholder.typicode.com/posts/1
-```
+- Backend: 137 tests via `pytest`
+- Frontend: 41 tests via `vitest`
 
-## Questions?
+Add tests for new features.
 
-Open an issue for discussion!
+## Project Layout
 
----
-
-**Thanks for making APIWatch better!** 🚀
+- Backend logic goes in `src/`
+- Frontend pages go in `frontend/src/pages/`
+- Backend tests go in `tests/`
+- Frontend tests go in `frontend/src/__tests__/`
