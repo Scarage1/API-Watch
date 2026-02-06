@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -13,8 +13,6 @@ import { useAppStore } from '../store/useAppStore';
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -48,6 +46,8 @@ export default function Dashboard() {
         successRate: (successful / testHistory.length) * 100,
         avgResponseTime: avgTime,
       });
+    } else {
+      setStats({ total: 0, successful: 0, failed: 0, successRate: 0, avgResponseTime: 0 });
     }
   }, [testHistory]);
 
@@ -58,7 +58,7 @@ export default function Dashboard() {
       title: 'Total Requests',
       value: stats.total,
       icon: Activity,
-      trend: '+12%',
+      trend: `${stats.total}`,
       trendUp: true,
       color: 'brand' as const,
     },
@@ -111,14 +111,31 @@ export default function Dashboard() {
     },
   };
 
-  const chartData = testHistory
-    .slice(0, 20)
-    .reverse()
-    .map((test, idx) => ({
-      name: `#${idx + 1}`,
-      time: Math.round(test.response_time * 1000),
-      success: test.success ? 1 : 0,
-    }));
+  // Response time chart data
+  const responseTimeData = useMemo(() => {
+    return testHistory
+      .slice(0, 20)
+      .reverse()
+      .map((test, idx) => ({
+        name: `#${idx + 1}`,
+        time: Math.round(test.response_time * 1000),
+      }));
+  }, [testHistory]);
+
+  // Success rate chart - cumulative success rate
+  const successRateData = useMemo(() => {
+    const reversed = testHistory.slice(0, 20).reverse();
+    let successCount = 0;
+    return reversed.map((test, idx) => {
+      if (test.success) successCount++;
+      const rate = Math.round((successCount / (idx + 1)) * 100);
+      return {
+        name: `#${idx + 1}`,
+        rate,
+        status: test.success ? 'pass' : 'fail',
+      };
+    });
+  }, [testHistory]);
 
   const tooltipStyle = {
     backgroundColor: 'rgba(15, 23, 42, 0.95)',
@@ -132,7 +149,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="section-title">Dashboard</h1>
         <p className="section-subtitle">Monitor your API testing performance</p>
@@ -191,9 +207,9 @@ export default function Dashboard() {
               Trend
             </div>
           </div>
-          {chartData.length > 0 ? (
+          {responseTimeData.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={chartData}>
+              <AreaChart data={responseTimeData}>
                 <defs>
                   <linearGradient id="timeGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#6366f1" stopOpacity={0.2} />
@@ -202,8 +218,11 @@ export default function Dashboard() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} unit="ms" />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value) => [`${value}ms`, 'Response Time']}
+                />
                 <Area
                   type="monotone"
                   dataKey="time"
@@ -228,22 +247,52 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Success Rate</h3>
-              <p className="text-xs text-surface-400 mt-0.5">Pass/fail per request</p>
+              <p className="text-xs text-surface-400 mt-0.5">Cumulative success % over requests</p>
             </div>
             <div className="badge-success">
               <CheckCircle2 className="w-3 h-3 mr-1" />
               {stats.successRate.toFixed(0)}%
             </div>
           </div>
-          {chartData.length > 0 ? (
+          {successRateData.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData} barCategoryGap="20%">
+              <AreaChart data={successRateData}>
+                <defs>
+                  <linearGradient id="successGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.2} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} domain={[0, 1]} ticks={[0, 1]} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="success" radius={[4, 4, 0, 0]} fill="#10b981" />
-              </BarChart>
+                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} domain={[0, 100]} unit="%" />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value) => [`${value}%`, 'Success Rate']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="rate"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  fill="url(#successGradient)"
+                  dot={(props: Record<string, unknown>) => {
+                    const { cx, cy, payload } = props as { cx: number; cy: number; payload: { status: string } };
+                    return (
+                      <circle
+                        key={`dot-${cx}-${cy}`}
+                        cx={cx}
+                        cy={cy}
+                        r={4}
+                        fill={payload.status === 'pass' ? '#10b981' : '#ef4444'}
+                        stroke="#fff"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  }}
+                  activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
           ) : (
             <div className="empty-state py-10">
