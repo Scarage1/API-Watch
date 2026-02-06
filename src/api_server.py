@@ -1,7 +1,8 @@
 """
-API Server for API-Watch Frontend.
+API Server for API-Watch.
 FastAPI server providing REST endpoints for the React frontend.
-Also includes webhook receiver functionality.
+Includes: v1 API (auth, collections, environments, history),
+legacy endpoints, webhook receiver, and SPA static file serving.
 """
 import sys
 import os
@@ -9,11 +10,14 @@ import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException, Request
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
 # Add src to path for absolute imports
@@ -23,6 +27,10 @@ from src.auth import AuthHandler, create_auth_from_config
 from src.retry import RetryConfig
 from src.runner import APIRunner, RequestConfig, RequestResult
 from src.diagnose import DiagnosisEngine
+from src.database import init_db, close_db, get_db
+from src.models import RequestHistory
+from src.jwt_auth import get_optional_user
+from src.routes import api_v1_router
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -31,24 +39,42 @@ logger = logging.getLogger(__name__)
 # Ensure webhook logs directory exists
 Path("logs/webhooks").mkdir(parents=True, exist_ok=True)
 
+
+# --- Lifespan ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup / shutdown lifecycle."""
+    logger.info("Initializing database...")
+    await init_db()
+    logger.info("Database ready.")
+    yield
+    logger.info("Shutting down...")
+    await close_db()
+
+
 # Create FastAPI app
 app = FastAPI(
     title="API-Watch Server",
-    description="Backend API for API-Watch Frontend",
-    version="1.0.0"
+    description="Backend API for API-Watch — a better Postman",
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Include v1 API routes
+app.include_router(api_v1_router)
 
-# Request Models
+
+# --- Request Models (legacy endpoints) ---
+
 class RequestConfigInput(BaseModel):
     method: str
     url: str
@@ -78,120 +104,130 @@ class TestSuiteInput(BaseModel):
     tests: List[TestCaseInput]
 
 
-# Health check
+# --- Core endpoints ---
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "api-watch-server"}
+    return {"status": "healthy", "service": "api-watch-server", "version": "2.0.0"}
 
 
-# Execute single request
 @app.post("/api/execute-request")
-async def execute_single_request(request_input: RequestConfigInput) -> RequestResult:
-    """
-    Execute a single API request.
-    
-    Args:
-        request_input: Request configuration
-        
-    Returns:
-        RequestResult with response details
-    """
+async def execute_single_request(
+    request_input: RequestConfigInput,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_optional_user),
+):
+    """Execute a single API request (async via httpx)."""
     try:
-        # Create runner
         retry_config = RetryConfig(max_retries=3, initial_delay=1.0)
         runner = APIRunner(auth_handler=None, retry_config=retry_config, logger=logger)
-        
-        # Create request config
+
         config = RequestConfig(
             method=request_input.method,
             url=request_input.url,
             headers=request_input.headers or {},
             params=request_input.params or {},
             body=request_input.body,
-            timeout=request_input.timeout
+            timeout=request_input.timeout,
         )
-        
-        # Execute request
-        result = runner.execute(config)
-        runner.close()
-        
+
+        result = await runner.execute_async(config)
+
+        # Save to history if user is authenticated
+        if user:
+            history_entry = RequestHistory(
+                owner_id=user.id,
+                request_method=result.request_method,
+                request_url=result.request_url,
+                request_headers=result.request_headers,
+                request_body=result.request_body,
+                success=result.success,
+                status_code=result.status_code,
+                response_time=result.response_time,
+                response_size=result.response_size,
+                response_body=result.response_body,
+                response_headers=result.response_headers,
+                error=result.error,
+                error_type=result.error_type,
+                retry_count=result.retry_count,
+            )
+            db.add(history_entry)
+            await db.commit()
+
         return result
-        
+
     except Exception as e:
         logger.exception("Error executing request")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Execute test suite
 @app.post("/api/execute-suite")
-async def execute_test_suite(suite_input: TestSuiteInput) -> List[RequestResult]:
-    """
-    Execute a test suite.
-    
-    Args:
-        suite_input: Test suite configuration
-        
-    Returns:
-        List of RequestResult objects
-    """
+async def execute_test_suite(
+    suite_input: TestSuiteInput,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_optional_user),
+) -> List[RequestResult]:
+    """Execute a test suite (async via httpx)."""
     try:
-        # Setup authentication
         auth_handler = create_auth_from_config(suite_input.auth or {})
-        
-        # Setup retry config
         retry_config = RetryConfig(
-            max_retries=suite_input.defaults.get('retries', 3),
-            initial_delay=1.0
+            max_retries=suite_input.defaults.get('retries', 3) if suite_input.defaults else 3,
+            initial_delay=1.0,
         )
-        
-        # Create runner
         runner = APIRunner(auth_handler, retry_config, logger)
-        
-        # Execute tests
+
         results = []
         for test in suite_input.tests:
-            # Build full URL
             url = suite_input.base_url + test.path
-            
-            # Merge headers
-            headers = suite_input.defaults.get('headers', {}).copy()
+            headers = (suite_input.defaults.get('headers', {}) if suite_input.defaults else {}).copy()
             headers.update(test.headers or {})
-            
-            # Create request config
+
             config = RequestConfig(
                 method=test.method,
                 url=url,
                 headers=headers,
                 params=test.params or {},
                 body=test.body,
-                timeout=test.timeout_seconds
+                timeout=test.timeout_seconds,
             )
-            
-            # Execute
-            result = runner.execute(config)
+
+            result = await runner.execute_async(config)
             results.append(result)
-        
-        runner.close()
+
+            # Save each result to history if user is authenticated
+            if user:
+                history_entry = RequestHistory(
+                    owner_id=user.id,
+                    request_method=result.request_method,
+                    request_url=result.request_url,
+                    request_headers=result.request_headers,
+                    request_body=result.request_body,
+                    success=result.success,
+                    status_code=result.status_code,
+                    response_time=result.response_time,
+                    response_size=result.response_size,
+                    response_body=result.response_body,
+                    response_headers=result.response_headers,
+                    error=result.error,
+                    error_type=result.error_type,
+                    retry_count=result.retry_count,
+                )
+                db.add(history_entry)
+
+        if user:
+            await db.commit()
+
         return results
-        
+
     except Exception as e:
         logger.exception("Error executing test suite")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Diagnose result
 @app.post("/api/diagnose")
 async def diagnose_result(result: RequestResult):
-    """
-    Diagnose a test result.
-    
-    Args:
-        result: RequestResult to diagnose
-        
-    Returns:
-        Diagnosis details
-    """
+    """Diagnose a test result."""
     try:
         diagnosis = DiagnosisEngine.diagnose(result)
         return {
@@ -199,28 +235,18 @@ async def diagnose_result(result: RequestResult):
             "cause": diagnosis.cause,
             "suggestion": diagnosis.suggestion,
             "severity": diagnosis.severity,
-            "category": diagnosis.category
+            "category": diagnosis.category,
         }
     except Exception as e:
         logger.exception("Error diagnosing result")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Get statistics
 @app.post("/api/stats")
 async def get_stats(results: List[RequestResult]):
-    """
-    Calculate statistics from results.
-    
-    Args:
-        results: List of RequestResult objects
-        
-    Returns:
-        Statistics summary
-    """
+    """Calculate statistics from results."""
     try:
         summary = DiagnosisEngine.get_summary(results)
-        # Convert Diagnosis dataclass objects to dicts for JSON serialization
         if "diagnoses" in summary:
             summary["diagnoses"] = [
                 {
@@ -238,69 +264,55 @@ async def get_stats(results: List[RequestResult]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Root endpoint - REMOVED, replaced with SPA serving below
-# @app.get("/")
-# async def root():
-#     """Root endpoint with service info."""
-#     return {
-#         "service": "API-Watch Server",
-#         "status": "running",
-#         "version": "1.0.0",
-#         "endpoints": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats", "/health"],
-#     }
+# --- Static files / SPA ---
 
-
-# Mount static files from frontend/dist or public (Azure deployment)
-# Try multiple paths: public (Azure), frontend/dist (local dev)
 frontend_dist = None
 for path in [
-    Path(__file__).parent.parent / "public",  # Azure deployment path
-    Path(__file__).parent.parent / "frontend" / "dist",  # Local dev path
+    Path(__file__).parent.parent / "public",
+    Path(__file__).parent.parent / "frontend" / "dist",
 ]:
     if path.exists():
         frontend_dist = path
         break
 
 if frontend_dist:
-    # Serve static assets (JS, CSS, images, etc.)
-    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
-    
-    # SPA fallback - serve index.html for all non-API/webhook routes
+    assets_path = frontend_dist / "assets"
+    if assets_path.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve React SPA for all non-API routes."""
-        # Skip if it's an API or webhook route (already handled above)
         if full_path.startswith("api/") or full_path.startswith("webhook"):
-            pass  # Let other routes handle it
-        
-        # If path looks like a file (has extension), try to serve it
+            pass
+
         if "." in full_path.split("/")[-1]:
             file_path = frontend_dist / full_path
             if file_path.exists():
                 return FileResponse(file_path)
-        
-        # Otherwise serve index.html (SPA fallback)
+
         return FileResponse(frontend_dist / "index.html")
 else:
-    # If no frontend dist, keep the API info endpoint
     @app.get("/")
     async def root():
         """Root endpoint with service info."""
         return {
             "service": "API-Watch Server",
             "status": "running",
-            "version": "1.0.0",
-            "endpoints": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats", "/health"],
+            "version": "2.0.0",
+            "endpoints": {
+                "legacy": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats"],
+                "v1": ["/api/v1/auth/*", "/api/v1/collections/*", "/api/v1/environments/*", "/api/v1/history/*"],
+            },
         }
 
 
-# Webhook catch-all (must be LAST so /api/* routes take priority)
+# --- Webhook ---
+
 @app.api_route("/webhook/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 @app.api_route("/webhook", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def webhook_catch_all(request: Request):
-    """
-    Catch-all webhook receiver. Send webhooks to /webhook or /webhook/<any-path>.
-    """
+    """Catch-all webhook receiver."""
     method = request.method
     headers = dict(request.headers)
 
@@ -313,7 +325,6 @@ async def webhook_catch_all(request: Request):
         except Exception:
             body = None
 
-    # Log webhook
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = Path("logs/webhooks") / f"webhook_{timestamp}.json"
     log_data = {
@@ -341,10 +352,7 @@ async def webhook_catch_all(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    
-    # Get port from environment variable (for Render, Railway, etc.) or default to 8000
+
     port = int(os.getenv("PORT", 8000))
-    
     logger.info(f"Starting API server on port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)

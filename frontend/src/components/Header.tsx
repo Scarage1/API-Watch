@@ -1,8 +1,17 @@
-import { Moon, Sun, Menu, Zap } from 'lucide-react';
+import { Moon, Sun, Menu, Zap, LogOut, User } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { useAuthStore } from '../store/useAuthStore';
+import { useNavigate } from 'react-router-dom';
 
 export default function Header() {
   const { darkMode, toggleDarkMode, toggleSidebar } = useAppStore();
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/auth');
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass border-b border-surface-200/50 dark:border-surface-700/30">
@@ -46,6 +55,23 @@ export default function Header() {
                 <Moon className="w-[18px] h-[18px] text-surface-500" />
               )}
             </button>
+
+            {user && (
+              <div className="flex items-center gap-2 ml-1">
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 dark:bg-brand-900/20 border border-brand-200/50 dark:border-brand-800/30">
+                  <User className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                  <span className="text-xs font-medium text-brand-700 dark:text-brand-400">{user.username}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors group"
+                  aria-label="Logout"
+                  title="Sign out"
+                >
+                  <LogOut className="w-[18px] h-[18px] text-surface-400 group-hover:text-red-500" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
