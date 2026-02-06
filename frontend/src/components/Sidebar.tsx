@@ -54,6 +54,8 @@ export default function Sidebar() {
           'transition-transform duration-300 ease-in-out',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
+        role="navigation"
+        aria-label="Main navigation"
       >
         <div className="flex flex-col h-full">
           {/* Mobile close */}
@@ -87,9 +89,15 @@ export default function Sidebar() {
                             : 'text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800/50 hover:text-surface-900 dark:hover:text-surface-200'
                         )
                       }
+                      aria-label={item.label}
                     >
-                      <item.icon className="w-4 h-4 flex-shrink-0" />
-                      <span>{item.label}</span>
+                      {({ isActive }) => (
+                        <>
+                          <item.icon className="w-4 h-4 flex-shrink-0" />
+                          <span>{item.label}</span>
+                          {isActive && <span className="sr-only">(current page)</span>}
+                        </>
+                      )}
                     </NavLink>
                   ))}
                 </div>

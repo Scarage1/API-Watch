@@ -16,6 +16,8 @@ import { useRequestStore } from '../store/useRequestStore';
 import type { HttpMethod, KeyValuePair } from '../store/useRequestStore';
 import { uid } from '../store/useRequestStore';
 import ImportExportPanel from './ImportExportPanel';
+import ConfirmDialog from './ConfirmDialog';
+import { toast } from '../store/useToastStore';
 
 interface SavedRequest {
   id: string;
@@ -53,6 +55,7 @@ export default function CollectionsSidebar() {
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
   const [showImportExport, setShowImportExport] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const fetchCollections = useCallback(async () => {
     try {
@@ -86,9 +89,10 @@ export default function CollectionsSidebar() {
       await apiClient.post('/api/v1/collections', { name: newName.trim() });
       setNewName('');
       setShowNewCollection(false);
+      toast.success('Collection created', newName.trim());
       fetchCollections();
     } catch {
-      // ignore
+      toast.error('Failed to create collection');
     } finally {
       setCreating(false);
     }
@@ -97,9 +101,17 @@ export default function CollectionsSidebar() {
   const deleteCollection = async (id: string) => {
     try {
       await apiClient.delete(`/api/v1/collections/${id}`);
+      toast.info('Collection deleted');
       fetchCollections();
     } catch {
-      // ignore
+      toast.error('Failed to delete collection');
+    }
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteCollection(deleteTarget.id);
+      setDeleteTarget(null);
     }
   };
 
@@ -243,7 +255,7 @@ export default function CollectionsSidebar() {
                     )}
                   </button>
                   <button
-                    onClick={() => deleteCollection(col.id)}
+                    onClick={() => setDeleteTarget({ id: col.id, name: col.name })}
                     className="p-0.5 rounded opacity-0 group-hover:opacity-100 text-surface-400 hover:text-red-500 transition-opacity"
                     title="Delete collection"
                   >
@@ -287,6 +299,15 @@ export default function CollectionsSidebar() {
       {showImportExport && (
         <ImportExportPanel onClose={() => setShowImportExport(false)} />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete collection?"
+        description={`"${deleteTarget?.name}" and all its requests will be permanently deleted.`}
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

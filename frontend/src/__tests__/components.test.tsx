@@ -22,12 +22,14 @@ describe('Header', () => {
 
   it('renders dark mode toggle', () => {
     renderWithRouter(<Header />);
-    expect(screen.getByLabelText('Toggle dark mode')).toBeInTheDocument();
+    // aria-label is now dynamic: "Switch to light mode" or "Switch to dark mode"
+    expect(screen.getByLabelText(/switch to (light|dark) mode/i)).toBeInTheDocument();
   });
 
-  it('shows connected status', () => {
+  it('shows connection status', () => {
     renderWithRouter(<Header />);
-    expect(screen.getByText('Connected')).toBeInTheDocument();
+    // Status starts as "Checking…" and transitions to Connected/Disconnected
+    expect(screen.getByLabelText(/server status/i)).toBeInTheDocument();
   });
 });
 

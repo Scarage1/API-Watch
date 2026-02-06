@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Save, Globe, Shield, Bell, Palette, Check } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { toast } from '../store/useToastStore';
 
 export default function Settings() {
   const { darkMode, toggleDarkMode, settings, updateSettings } = useAppStore();
@@ -22,6 +23,7 @@ export default function Settings() {
       apiToken: token,
     });
     setSaved(true);
+    toast.success('Settings saved');
     window.setTimeout(() => setSaved(false), 2000);
   };
 
@@ -72,6 +74,9 @@ export default function Settings() {
           input: (
             <button
               onClick={toggleDarkMode}
+              role="switch"
+              aria-checked={darkMode}
+              aria-label="Dark mode"
               className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${darkMode ? 'bg-brand-600' : 'bg-surface-200 dark:bg-surface-700'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${darkMode ? 'translate-x-5' : ''}`} />
@@ -90,6 +95,9 @@ export default function Settings() {
           input: (
             <button
               onClick={() => setAutoSave(!autoSave)}
+              role="switch"
+              aria-checked={autoSave}
+              aria-label="Auto-save history"
               className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${autoSave ? 'bg-brand-600' : 'bg-surface-200 dark:bg-surface-700'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${autoSave ? 'translate-x-5' : ''}`} />
@@ -102,6 +110,9 @@ export default function Settings() {
           input: (
             <button
               onClick={() => setAlerts(!alerts)}
+              role="switch"
+              aria-checked={alerts}
+              aria-label="Failure alerts"
               className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${alerts ? 'bg-brand-600' : 'bg-surface-200 dark:bg-surface-700'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${alerts ? 'translate-x-5' : ''}`} />

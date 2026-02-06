@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from '../store/useToastStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -59,10 +60,18 @@ apiClient.interceptors.response.use(
           }
         }
       } catch {
-        // Refresh failed — clear auth
+        // Refresh failed — clear auth & notify
         localStorage.removeItem('api-watch-auth');
+        toast.warning('Session expired', 'Please sign in again');
+        window.location.href = '/auth';
       }
     }
+
+    // Global network error feedback
+    if (!error.response) {
+      toast.error('Network error', 'Could not reach the server');
+    }
+
     return Promise.reject(error);
   }
 );
