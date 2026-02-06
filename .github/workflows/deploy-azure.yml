@@ -1,4 +1,4 @@
-name: Deploy Backend to Azure
+name: Deploy to Azure
 
 on:
   push:
@@ -8,32 +8,81 @@ on:
 
 env:
   AZURE_WEBAPP_NAME: apiwatch-shivamkumar
+  AZURE_RESOURCE_GROUP: apiwatch-rg
   PYTHON_VERSION: '3.11'
 
 jobs:
-  build-and-deploy-backend:
+  test-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run backend tests
+      - name: Run backend tests (137 tests)
         run: |
           pip install pytest pytest-asyncio httpx
-          python -m pytest tests/ -v
+          python -m pytest tests/ -v --tb=short
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend tests (41 tests)
+        working-directory: frontend
+        run: npm run test
+
+      - name: Build frontend with production backend URL
+        working-directory: frontend
+        env:
+          VITE_API_URL: https://apiwatch-shivamkumar.azurewebsites.net
+        run: npm run build
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create deployment package
+        run: |
+          mkdir deploy-package
+          cp -r src requirements.txt runtime.txt startup.sh examples deploy-package/
+          cp -r frontend/dist deploy-package/public
+          cd deploy-package
+          zip -r ../backend-deploy.zip .
 
       - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v2
-        with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: .
+        run: |
+          az webapp deploy \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --src-path backend-deploy.zip \
+            --type zip \
+            --async false
+
+      - name: Test deployment
+        run: |
+          echo "Waiting for deployment to stabilize..."
+          sleep 15
+          curl -f https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/health || exit 1
+          echo "✅ Backend is healthy!"
+
+      - name: Logout from Azure
+        run: az logout
+        if: always()
