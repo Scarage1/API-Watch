@@ -34,6 +34,7 @@ import ResponseViewer from '../components/ResponseViewer';
 import CodeGenerator from '../components/CodeGenerator';
 import type { CodeGenRequest } from '../lib/codeGenerator';
 import { useAppStore } from '../store/useAppStore';
+import { toast } from '../store/useToastStore';
 
 const HTTP_METHODS: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 
@@ -150,6 +151,7 @@ export default function SingleRequest() {
           consoleLogs: preResult.consoleLogs,
           scriptError: preResult.error,
         });
+        toast.error('Pre-request script failed', preResult.error);
         return;
       }
 
@@ -265,6 +267,7 @@ export default function SingleRequest() {
         timestamp: new Date().toISOString(),
         consoleLogs: preScriptLogs,
       });
+      toast.error('Request failed', message);
     }
   }, [tab, envVars, setLoading, setResponse, addToHistory]);
 
@@ -284,17 +287,20 @@ export default function SingleRequest() {
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)]">
       {/* Tab Bar */}
-      <div className="flex items-center gap-0.5 px-1 py-1 bg-surface-100 dark:bg-surface-900 rounded-xl mb-3 overflow-x-auto">
+      <div className="flex items-center gap-0.5 px-1 py-1 bg-surface-100 dark:bg-surface-900 rounded-xl mb-3 overflow-x-auto" role="tablist" aria-label="Request tabs">
         {tabs.map((t) => (
           <div
             key={t.id}
             className="relative group"
+            role="presentation"
             onContextMenu={(e) => {
               e.preventDefault();
               setContextMenuTab(t.id === contextMenuTab ? null : t.id);
             }}
           >
             <button
+              role="tab"
+              aria-selected={t.id === activeTabId}
               onClick={() => setActiveTab(t.id)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap',
@@ -470,10 +476,12 @@ export default function SingleRequest() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 flex-1 min-h-0">
         {/* Left: Request config */}
         <div className="card !p-0 overflow-hidden flex flex-col min-h-[300px]">
-          <div className="flex border-b border-surface-100 dark:border-surface-700/50">
+          <div className="flex border-b border-surface-100 dark:border-surface-700/50" role="tablist" aria-label="Request configuration">
             {panels.map((p) => (
               <button
                 key={p.id}
+                role="tab"
+                aria-selected={activePanel === p.id}
                 onClick={() => setActivePanel(p.id)}
                 className={cn(
                   'px-4 py-2.5 text-xs font-medium transition-colors relative',

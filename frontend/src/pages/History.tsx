@@ -18,6 +18,8 @@ import { useRequestStore, uid, type KeyValuePair } from '../store/useRequestStor
 import { cn, formatDuration, formatBytes } from '../lib/utils';
 import { apiClient } from '../lib/api';
 import RequestDetailModal, { type HistoryDetail } from '../components/RequestDetailModal';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { toast } from '../store/useToastStore';
 
 type MethodFilter = 'ALL' | 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 type StatusFilter = 'all' | 'success' | 'failed';
@@ -55,6 +57,7 @@ export default function History() {
   // Detail modal
   const [selectedDetail, setSelectedDetail] = useState<HistoryDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const fetchServerHistory = useCallback(async () => {
     try {
@@ -186,6 +189,7 @@ export default function History() {
 
     useRequestStore.getState().setActiveTab(tabId);
     setSelectedDetail(null);
+    toast.info('Opened in new tab', 'Switch to Request page to see it');
   };
 
   // Export history to JSON
@@ -198,6 +202,13 @@ export default function History() {
     a.download = `api-watch-history-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    toast.success('History exported', `${data.length} items exported`);
+  };
+
+  const handleClearHistory = () => {
+    clearHistory();
+    setShowClearConfirm(false);
+    toast.info('History cleared');
   };
 
   const methods: MethodFilter[] = ['ALL', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
@@ -228,7 +239,7 @@ export default function History() {
                 <Download className="w-3.5 h-3.5" />
                 Export
               </button>
-              <button onClick={clearHistory} className="btn-ghost text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 !text-xs">
+              <button onClick={() => setShowClearConfirm(true)} className="btn-ghost text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 !text-xs">
                 <Trash2 className="w-3.5 h-3.5" />
                 Clear All
               </button>
@@ -526,6 +537,15 @@ export default function History() {
           onReplay={handleReplay}
         />
       )}
+
+      <ConfirmDialog
+        open={showClearConfirm}
+        title="Clear all history?"
+        description="This will permanently remove all request history. This action cannot be undone."
+        confirmLabel="Clear History"
+        onConfirm={handleClearHistory}
+        onCancel={() => setShowClearConfirm(false)}
+      />
     </div>
   );
 }

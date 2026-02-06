@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Zap, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
+import { toast } from '../store/useToastStore';
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -17,12 +18,14 @@ export default function AuthPage() {
     try {
       if (isLogin) {
         await login(username, password);
+        toast.success('Welcome back!', `Signed in as ${username}`);
       } else {
         await register(email, username, password);
+        toast.success('Account created', 'You are now signed in');
       }
       navigate('/');
     } catch {
-      // Error is set in store
+      toast.error(isLogin ? 'Sign in failed' : 'Registration failed');
     }
   };
 
@@ -56,10 +59,11 @@ export default function AuthPage() {
             {/* Email (register only) */}
             {!isLogin && (
               <div>
-                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
+                <label htmlFor="auth-email" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
                   Email
                 </label>
                 <input
+                  id="auth-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -72,10 +76,11 @@ export default function AuthPage() {
 
             {/* Username */}
             <div>
-              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
+              <label htmlFor="auth-username" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
                 Username
               </label>
               <input
+                id="auth-username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -87,11 +92,12 @@ export default function AuthPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
+              <label htmlFor="auth-password" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
                 Password
               </label>
               <div className="relative">
                 <input
+                  id="auth-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -112,7 +118,7 @@ export default function AuthPage() {
 
             {/* Error */}
             {error && (
-              <div className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 text-sm text-red-700 dark:text-red-400">
+              <div role="alert" aria-live="polite" className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 text-sm text-red-700 dark:text-red-400">
                 {error}
               </div>
             )}
