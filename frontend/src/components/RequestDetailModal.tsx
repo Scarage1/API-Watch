@@ -8,7 +8,6 @@ import {
   Clock,
   HardDrive,
   RefreshCw,
-  Save,
   FileJson,
   Code2,
 } from 'lucide-react';

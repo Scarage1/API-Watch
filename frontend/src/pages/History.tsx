@@ -14,7 +14,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { useRequestStore } from '../store/useRequestStore';
+import { useRequestStore, uid, type KeyValuePair } from '../store/useRequestStore';
 import { cn, formatDuration, formatBytes } from '../lib/utils';
 import { apiClient } from '../lib/api';
 import RequestDetailModal, { type HistoryDetail } from '../components/RequestDetailModal';
@@ -166,12 +166,12 @@ export default function History() {
 
   // Replay — open history entry in a new request tab
   const handleReplay = (detail: HistoryDetail) => {
-    const headers: { key: string; value: string; enabled: boolean }[] = [];
+    const headers: KeyValuePair[] = [];
     if (detail.request_headers) {
       try {
         const parsed = JSON.parse(detail.request_headers);
         Object.entries(parsed).forEach(([key, value]) => {
-          headers.push({ key, value: String(value), enabled: true });
+          headers.push({ id: uid(), key, value: String(value), enabled: true });
         });
       } catch { /* ignore */ }
     }
@@ -181,7 +181,7 @@ export default function History() {
       method: detail.request_method as 'GET',
       url: detail.request_url,
       headers,
-      body: detail.request_body || '',
+      bodyRaw: detail.request_body || '',
     });
 
     useRequestStore.getState().setActiveTab(tabId);

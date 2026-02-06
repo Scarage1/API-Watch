@@ -11,9 +11,8 @@ import {
   Layers,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { apiClient } from '../lib/api';
 import { useAppStore } from '../store/useAppStore';
-import { useEnvironmentStore, type EnvironmentEntry } from '../store/useEnvironmentStore';
+import { useEnvironmentStore } from '../store/useEnvironmentStore';
 import type { TestSuite } from '../types';
 
 type ImportType = 'collection' | 'environment' | 'postman';
@@ -245,7 +244,7 @@ export default function ImportExportPanel({ onClose }: ImportExportPanelProps) {
 
       // Single suite
       if (obj.name && obj.base_url && Array.isArray(obj.tests)) {
-        addTestSuite(obj as TestSuite);
+        addTestSuite(obj as unknown as TestSuite);
         setResult({ success: true, message: `Imported collection "${obj.name}"` });
         return;
       }

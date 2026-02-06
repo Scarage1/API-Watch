@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { ChevronDown, Play, Code2, Sparkles } from 'lucide-react';
+import { ChevronDown, Code2, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface Snippet {
