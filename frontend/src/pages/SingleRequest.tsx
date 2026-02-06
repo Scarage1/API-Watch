@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  Code2,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import apiClient from '../lib/api';
@@ -30,6 +31,8 @@ import KeyValueEditor from '../components/KeyValueEditor';
 import BodyEditor from '../components/BodyEditor';
 import ScriptEditor from '../components/ScriptEditor';
 import ResponseViewer from '../components/ResponseViewer';
+import CodeGenerator from '../components/CodeGenerator';
+import type { CodeGenRequest } from '../lib/codeGenerator';
 import { useAppStore } from '../store/useAppStore';
 
 const HTTP_METHODS: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
@@ -89,6 +92,7 @@ export default function SingleRequest() {
   const [activePanel, setActivePanel] = useState<RequestPanel>('params');
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
   const [showEnvPanel, setShowEnvPanel] = useState(false);
+  const [showCodeGen, setShowCodeGen] = useState(false);
 
   // Fetch environments on mount
   useEffect(() => {
@@ -368,6 +372,15 @@ export default function SingleRequest() {
           />
 
           <button
+            onClick={() => setShowCodeGen(true)}
+            disabled={!tab.url}
+            className="btn-secondary !px-3"
+            title="Generate Code"
+          >
+            <Code2 className="w-4 h-4" />
+          </button>
+
+          <button
             onClick={executeRequest}
             disabled={tab.isLoading || !tab.url}
             className="btn-primary !px-5"
@@ -568,6 +581,30 @@ export default function SingleRequest() {
           )}
         </div>
       </div>
+
+      {/* Code Generator Modal */}
+      {showCodeGen && (
+        <CodeGenerator
+          request={{
+            method: tab.method,
+            url: interpolateString(tab.url, envVars),
+            headers: Object.fromEntries(
+              tab.headers.filter(h => h.enabled && h.key).map(h => [h.key, interpolateString(h.value, envVars)])
+            ),
+            params: Object.fromEntries(
+              tab.params.filter(p => p.enabled && p.key).map(p => [p.key, interpolateString(p.value, envVars)])
+            ),
+            body: tab.method !== 'GET' && tab.method !== 'HEAD' && tab.bodyType !== 'none'
+              ? (tab.bodyType === 'json' || tab.bodyType === 'text' || tab.bodyType === 'xml'
+                ? interpolateString(tab.bodyRaw, envVars)
+                : Object.fromEntries(tab.bodyFormData.filter(f => f.enabled && f.key).map(f => [f.key, f.value])))
+              : undefined,
+            bodyType: tab.bodyType,
+            timeout: tab.timeout,
+          } as CodeGenRequest}
+          onClose={() => setShowCodeGen(false)}
+        />
+      )}
     </div>
   );
 }
