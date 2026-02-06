@@ -1,24 +1,10 @@
-Phase 4: Scripting & Assertions
+Phase 5: Advanced Features
 
-- Script execution engine with sandboxed JS runner (new Function)
-- Postman-compatible pm.test() and pm.expect() assertion API
-- 15 matchers: toBe, toEqual, toBeDefined, toBeUndefined, toBeNull,
-  toBeTruthy, toBeFalsy, toContain, toHaveLength, toBeLessThan,
-  toBeGreaterThan, toMatch, toHaveProperty, toBeType, plus .not negation
-- pm.response: code, json(), text(), headers.get/has, responseTime/Size
-- pm.environment: get/set/unset/toObject for variable management
-- Console capture: log, info, warn, error with timestamps
-- Lightweight JSON Schema validator (type, required, properties, items,
-  enum, min/max Length, min/max for numbers)
-- Pre-request scripts: run before API call, can set variables
-- Post-request test scripts: run after response, assert on results
-- ScriptEditor component with line numbers, tab key support, and
-  snippet insertion (8 test snippets + 4 pre-request snippets)
-- TestResultsPanel: pass/fail icons, summary bar, error display
-- ConsolePanel: color-coded log levels, timestamp, clear button
-- ResponseViewer: added Tests and Console tabs alongside Body/Headers
-- SingleRequest: added Pre-request and Tests panels, wired execution
-  flow (pre-script → request → test script → display results)
-- RequestTab type extended: preRequestScript, testScript fields
-- TabResponse extended: testResults, consoleLogs, scriptError fields
-- 66 new script engine tests, 136 frontend total, 172 backend (all pass)
+- Code generation engine (cURL, Python, JavaScript, Node.js) with CodeGenerator modal
+- Code button in request builder URL bar for instant snippet generation
+- Enhanced History page with server-backed pagination, clickable detail modal, replay, and export
+- RequestDetailModal with full request/response viewer, headers, replay action
+- Enhanced Collection Runner with iteration count, delay between requests, environment variable injection, progress bar, and stop button
+- Import/Export panel supporting API-Watch collections, environments, full backup, and Postman v2.1 import
+- Import/Export wired into CollectionsSidebar with ArrowUpDown button
+- 26 new code generator tests (162 frontend total, 172 backend — all passing)

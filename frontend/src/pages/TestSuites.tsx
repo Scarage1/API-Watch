@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   FolderOpen,
   Plus,
@@ -13,8 +13,13 @@ import {
   ChevronDown,
   ChevronRight,
   AlertCircle,
+  Settings2,
+  Timer,
+  Repeat,
+  Layers,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { useEnvironmentStore } from '../store/useEnvironmentStore';
 import apiClient from '../lib/api';
 import { cn } from '../lib/utils';
 import type { TestSuite, RequestResult } from '../types';
@@ -23,60 +28,138 @@ interface SuiteRunResult {
   suiteName: string;
   results: RequestResult[];
   running: boolean;
+  progress: number; // 0-100
+  currentIteration: number;
+  totalIterations: number;
+  currentTest: number;
+  totalTests: number;
 }
 
 export default function TestSuites() {
   const { testSuites, addTestSuite, removeTestSuite, addBatchToHistory, settings } = useAppStore();
+  const { environments, activeEnv } = useEnvironmentStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [suiteRuns, setSuiteRuns] = useState<Record<string, SuiteRunResult>>({});
   const [expandedSuite, setExpandedSuite] = useState<string | null>(null);
   const [expandedResults, setExpandedResults] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Runner options
+  const [showRunnerOpts, setShowRunnerOpts] = useState<string | null>(null);
+  const [iterations, setIterations] = useState<Record<string, number>>({});
+  const [delay, setDelay] = useState<Record<string, number>>({});
+  const [envOverride, setEnvOverride] = useState<Record<string, string>>({});
+  const abortRef = useRef<Record<string, boolean>>({});
+
+  const getIterations = (name: string) => iterations[name] || 1;
+  const getDelay = (name: string) => delay[name] || 0;
+
+  // Interpolate variables into a string
+  const interpolate = (str: string, vars: Record<string, string>): string => {
+    return str.replace(/\{\{([^}]+)\}\}/g, (_, key) => vars[key.trim()] ?? `{{${key.trim()}}}`);
+  };
+
   const runSuite = async (suite: TestSuite) => {
     setError(null);
+    const iters = getIterations(suite.name);
+    const delayMs = getDelay(suite.name);
+    const totalTests = suite.tests.length * iters;
+    abortRef.current[suite.name] = false;
+
     setSuiteRuns((prev) => ({
       ...prev,
-      [suite.name]: { suiteName: suite.name, results: [], running: true },
+      [suite.name]: {
+        suiteName: suite.name,
+        results: [],
+        running: true,
+        progress: 0,
+        currentIteration: 1,
+        totalIterations: iters,
+        currentTest: 0,
+        totalTests,
+      },
     }));
     setExpandedResults(suite.name);
 
-    try {
-      const payload = {
-        name: suite.name,
-        description: suite.description || '',
-        base_url: suite.base_url,
-        defaults: suite.defaults || { timeout_seconds: settings.defaultTimeout, retries: settings.maxRetries },
-        auth: suite.auth || {},
-        tests: suite.tests.map((t) => ({
-          id: t.id,
-          method: t.method,
-          path: t.path,
-          description: t.description || '',
-          headers: t.headers || {},
-          params: t.params || {},
-          body: t.body || null,
-          timeout_seconds: t.timeout_seconds || settings.defaultTimeout,
-        })),
-      };
+    // Resolve environment variables
+    const envId = envOverride[suite.name];
+    let vars: Record<string, string> = {};
+    if (envId && envId !== '__none__') {
+      const env = environments.find((e) => e.id === envId);
+      if (env) vars = env.variables;
+    } else if (activeEnv) {
+      vars = activeEnv.variables;
+    }
 
-      const response = await apiClient.post('/api/execute-suite', payload);
-      const results: RequestResult[] = response.data;
+    const allResults: RequestResult[] = [];
+    let completed = 0;
+
+    try {
+      for (let iter = 0; iter < iters; iter++) {
+        if (abortRef.current[suite.name]) break;
+
+        const payload = {
+          name: suite.name,
+          description: suite.description || '',
+          base_url: interpolate(suite.base_url, vars),
+          defaults: suite.defaults || { timeout_seconds: settings.defaultTimeout, retries: settings.maxRetries },
+          auth: suite.auth || {},
+          tests: suite.tests.map((t) => ({
+            id: t.id,
+            method: t.method,
+            path: interpolate(t.path, vars),
+            description: t.description || '',
+            headers: Object.fromEntries(
+              Object.entries(t.headers || {}).map(([k, v]) => [k, interpolate(String(v), vars)])
+            ),
+            params: Object.fromEntries(
+              Object.entries(t.params || {}).map(([k, v]) => [k, interpolate(String(v), vars)])
+            ),
+            body: t.body ? interpolate(typeof t.body === 'string' ? t.body : JSON.stringify(t.body), vars) : null,
+            timeout_seconds: t.timeout_seconds || settings.defaultTimeout,
+          })),
+        };
+
+        const response = await apiClient.post('/api/execute-suite', payload);
+        const results: RequestResult[] = response.data;
+        allResults.push(...results);
+        completed += results.length;
+
+        setSuiteRuns((prev) => ({
+          ...prev,
+          [suite.name]: {
+            ...prev[suite.name],
+            results: [...allResults],
+            progress: Math.round((completed / totalTests) * 100),
+            currentIteration: iter + 1,
+            currentTest: completed,
+          },
+        }));
+
+        // Delay between iterations
+        if (delayMs > 0 && iter < iters - 1 && !abortRef.current[suite.name]) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
 
       setSuiteRuns((prev) => ({
         ...prev,
-        [suite.name]: { suiteName: suite.name, results, running: false },
+        [suite.name]: { ...prev[suite.name], running: false, progress: 100 },
       }));
 
-      addBatchToHistory(results);
+      addBatchToHistory(allResults);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to execute suite';
       setError(msg);
       setSuiteRuns((prev) => ({
         ...prev,
-        [suite.name]: { suiteName: suite.name, results: [], running: false },
+        [suite.name]: { ...prev[suite.name], running: false, results: allResults },
       }));
     }
+  };
+
+  const stopSuite = (name: string) => {
+    abortRef.current[name] = true;
   };
 
   const deleteSuite = (name: string) => {
@@ -153,16 +236,28 @@ export default function TestSuites() {
 
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => runSuite(suite)}
-                      disabled={run?.running}
-                      className="btn-primary !py-1.5 !px-3 !text-xs"
+                      onClick={() => run?.running ? stopSuite(suite.name) : runSuite(suite)}
+                      disabled={false}
+                      className={cn('!py-1.5 !px-3 !text-xs', run?.running ? 'btn-secondary' : 'btn-primary')}
                     >
                       {run?.running ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <>
+                          <X className="w-3 h-3" />
+                          Stop
+                        </>
                       ) : (
-                        <Play className="w-3 h-3" />
+                        <>
+                          <Play className="w-3 h-3" />
+                          Run
+                        </>
                       )}
-                      {run?.running ? 'Running...' : 'Run'}
+                    </button>
+                    <button
+                      onClick={() => setShowRunnerOpts(showRunnerOpts === suite.name ? null : suite.name)}
+                      className={cn('btn-secondary !py-1.5 !px-3 !text-xs', showRunnerOpts === suite.name && 'ring-2 ring-brand-500/30')}
+                    >
+                      <Settings2 className="w-3 h-3" />
+                      Options
                     </button>
                     <button
                       onClick={() => setExpandedSuite(isExpanded ? null : suite.name)}
@@ -178,7 +273,80 @@ export default function TestSuites() {
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
+
+                  {/* Runner Options */}
+                  {showRunnerOpts === suite.name && (
+                    <div className="mt-4 p-3 bg-surface-50 dark:bg-surface-900/50 rounded-xl space-y-3 animate-slide-up">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[10px] font-medium text-surface-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                            <Repeat className="w-3 h-3" /> Iterations
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={getIterations(suite.name)}
+                            onChange={(e) => setIterations({ ...iterations, [suite.name]: Math.max(1, parseInt(e.target.value) || 1) })}
+                            className="input text-xs !py-1.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-medium text-surface-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                            <Timer className="w-3 h-3" /> Delay (ms)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={30000}
+                            step={100}
+                            value={getDelay(suite.name)}
+                            onChange={(e) => setDelay({ ...delay, [suite.name]: Math.max(0, parseInt(e.target.value) || 0) })}
+                            className="input text-xs !py-1.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-medium text-surface-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                            <Layers className="w-3 h-3" /> Environment
+                          </label>
+                          <select
+                            value={envOverride[suite.name] || ''}
+                            onChange={(e) => setEnvOverride({ ...envOverride, [suite.name]: e.target.value })}
+                            className="input text-xs !py-1.5"
+                          >
+                            <option value="">
+                              {activeEnv ? `Active (${activeEnv.name})` : 'No environment'}
+                            </option>
+                            <option value="__none__">None</option>
+                            {environments.map((env) => (
+                              <option key={env.id} value={env.id}>{env.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* Progress bar */}
+                {run?.running && (
+                  <div className="px-5 py-3 border-t border-surface-100 dark:border-surface-700/50 bg-surface-50/50 dark:bg-surface-900/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-medium text-surface-500">
+                        Iteration {run.currentIteration}/{run.totalIterations} · Test {run.currentTest}/{run.totalTests}
+                      </span>
+                      <span className="text-[10px] font-semibold text-brand-600 dark:text-brand-400">
+                        {run.progress}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-surface-200 dark:bg-surface-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-brand-600 dark:bg-brand-500 rounded-full transition-all duration-300"
+                        style={{ width: `${run.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Expanded tests list */}
                 {isExpanded && (

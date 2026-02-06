@@ -8,12 +8,14 @@ import {
   Loader2,
   FolderPlus,
   X,
+  ArrowUpDown,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import apiClient from '../lib/api';
 import { useRequestStore } from '../store/useRequestStore';
 import type { HttpMethod, KeyValuePair } from '../store/useRequestStore';
 import { uid } from '../store/useRequestStore';
+import ImportExportPanel from './ImportExportPanel';
 
 interface SavedRequest {
   id: string;
@@ -50,6 +52,7 @@ export default function CollectionsSidebar() {
   const [showNewCollection, setShowNewCollection] = useState(false);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showImportExport, setShowImportExport] = useState(false);
 
   const fetchCollections = useCallback(async () => {
     try {
@@ -159,13 +162,22 @@ export default function CollectionsSidebar() {
         <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-400 dark:text-surface-500">
           Collections
         </span>
-        <button
-          onClick={() => setShowNewCollection(!showNewCollection)}
-          className="p-1 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-surface-400 hover:text-surface-600 transition-colors"
-          title="New collection"
-        >
-          <FolderPlus className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => setShowImportExport(true)}
+            className="p-1 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-surface-400 hover:text-surface-600 transition-colors"
+            title="Import / Export"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setShowNewCollection(!showNewCollection)}
+            className="p-1 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-surface-400 hover:text-surface-600 transition-colors"
+            title="New collection"
+          >
+            <FolderPlus className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* New collection input */}
@@ -269,6 +281,11 @@ export default function CollectionsSidebar() {
             );
           })}
         </div>
+      )}
+
+      {/* Import/Export Modal */}
+      {showImportExport && (
+        <ImportExportPanel onClose={() => setShowImportExport(false)} />
       )}
     </div>
   );
