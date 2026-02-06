@@ -24,8 +24,11 @@ import {
   previewInterpolation,
   DYNAMIC_VARIABLE_NAMES,
 } from '../lib/interpolate';
+import { runScript, PRE_REQUEST_SNIPPETS, TEST_SNIPPETS } from '../lib/scriptEngine';
+import type { ScriptContext } from '../lib/scriptEngine';
 import KeyValueEditor from '../components/KeyValueEditor';
 import BodyEditor from '../components/BodyEditor';
+import ScriptEditor from '../components/ScriptEditor';
 import ResponseViewer from '../components/ResponseViewer';
 import { useAppStore } from '../store/useAppStore';
 
@@ -51,7 +54,7 @@ const methodDotColors: Record<string, string> = {
   OPTIONS: 'bg-gray-500',
 };
 
-type RequestPanel = 'params' | 'headers' | 'body';
+type RequestPanel = 'params' | 'headers' | 'body' | 'pre-request' | 'tests';
 
 function deriveTabName(url: string, currentName: string): string {
   if (currentName && currentName !== 'New Request' && currentName !== 'Untitled') {
@@ -118,6 +121,38 @@ export default function SingleRequest() {
     const tabId = tab.id;
     setLoading(tabId, true);
 
+    // Start with current env variables
+    let activeVars = { ...envVars };
+
+    // ── Run pre-request script ────────────────────────────────────────────
+    let preScriptLogs: import('../lib/scriptEngine').ConsoleEntry[] = [];
+    if (tab.preRequestScript.trim()) {
+      const preContext: ScriptContext = { envVariables: activeVars };
+      const preResult = runScript(tab.preRequestScript, preContext);
+      preScriptLogs = preResult.consoleLogs;
+
+      if (preResult.error) {
+        setResponse(tabId, {
+          success: false,
+          status_code: null,
+          response_time: 0,
+          response_size: 0,
+          response_body: null,
+          response_headers: {},
+          error: `Pre-request script error: ${preResult.error}`,
+          error_type: 'SCRIPT_ERROR',
+          retry_count: 0,
+          timestamp: new Date().toISOString(),
+          consoleLogs: preResult.consoleLogs,
+          scriptError: preResult.error,
+        });
+        return;
+      }
+
+      // Use variables that the script may have updated
+      activeVars = preResult.updatedVariables;
+    }
+
     try {
       // Collect raw values
       const rawHeaders: Record<string, string> = {};
@@ -130,19 +165,19 @@ export default function SingleRequest() {
         .filter((p) => p.enabled && p.key)
         .forEach((p) => { rawParams[p.key] = p.value; });
 
-      // Interpolate everything through the active environment
-      const finalUrl = interpolateString(tab.url, envVars);
-      const finalHeaders = interpolateRecord(rawHeaders, envVars);
-      const finalParams = interpolateRecord(rawParams, envVars);
+      // Interpolate everything through the (possibly updated) environment
+      const finalUrl = interpolateString(tab.url, activeVars);
+      const finalHeaders = interpolateRecord(rawHeaders, activeVars);
+      const finalParams = interpolateRecord(rawParams, activeVars);
 
       let body: any = null;
       if (tab.method !== 'GET' && tab.method !== 'HEAD') {
         if (tab.bodyType === 'json') {
-          const interpolated = interpolateString(tab.bodyRaw, envVars);
+          const interpolated = interpolateString(tab.bodyRaw, activeVars);
           try { body = JSON.parse(interpolated); } catch { body = interpolated; }
           if (!finalHeaders['Content-Type']) finalHeaders['Content-Type'] = 'application/json';
         } else if (tab.bodyType === 'text' || tab.bodyType === 'xml') {
-          body = interpolateString(tab.bodyRaw, envVars);
+          body = interpolateString(tab.bodyRaw, activeVars);
           if (tab.bodyType === 'xml' && !finalHeaders['Content-Type']) {
             finalHeaders['Content-Type'] = 'application/xml';
           }
@@ -151,7 +186,7 @@ export default function SingleRequest() {
           tab.bodyFormData
             .filter((f) => f.enabled && f.key)
             .forEach((f) => { formObj[f.key] = f.value; });
-          body = interpolateBody(formObj, envVars);
+          body = interpolateBody(formObj, activeVars);
           if (tab.bodyType === 'x-www-form-urlencoded' && !finalHeaders['Content-Type']) {
             finalHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
           }
@@ -168,6 +203,31 @@ export default function SingleRequest() {
       });
       const result = res.data;
 
+      // ── Run test script ──────────────────────────────────────────────────
+      let testResults: import('../lib/scriptEngine').AssertionResult[] = [];
+      let testLogs: import('../lib/scriptEngine').ConsoleEntry[] = [];
+      let testScriptError: string | null = null;
+
+      if (tab.testScript.trim()) {
+        const testContext: ScriptContext = {
+          response: {
+            status: result.status_code,
+            body: result.response_body,
+            headers: result.response_headers || {},
+            responseTime: (result.response_time || 0) * 1000, // convert to ms
+            responseSize: result.response_size || 0,
+          },
+          envVariables: activeVars,
+        };
+        const testResult = runScript(tab.testScript, testContext);
+        testResults = testResult.assertions;
+        testLogs = testResult.consoleLogs;
+        testScriptError = testResult.error;
+
+        // Update env vars with any the test script set
+        activeVars = testResult.updatedVariables;
+      }
+
       const tabResponse: TabResponse = {
         success: result.success,
         status_code: result.status_code,
@@ -179,6 +239,9 @@ export default function SingleRequest() {
         error_type: result.error_type,
         retry_count: result.retry_count || 0,
         timestamp: result.timestamp || new Date().toISOString(),
+        testResults,
+        consoleLogs: [...preScriptLogs, ...testLogs],
+        scriptError: testScriptError,
       };
 
       setResponse(tabId, tabResponse);
@@ -196,6 +259,7 @@ export default function SingleRequest() {
         error_type: 'CLIENT_ERROR',
         retry_count: 0,
         timestamp: new Date().toISOString(),
+        consoleLogs: preScriptLogs,
       });
     }
   }, [tab, envVars, setLoading, setResponse, addToHistory]);
@@ -209,6 +273,8 @@ export default function SingleRequest() {
     { id: 'params', label: 'Params', count: enabledParamsCount },
     { id: 'headers', label: 'Headers', count: enabledHeadersCount },
     { id: 'body', label: 'Body' },
+    { id: 'pre-request', label: 'Pre-request' },
+    { id: 'tests', label: 'Tests' },
   ];
 
   return (
@@ -455,6 +521,26 @@ export default function SingleRequest() {
                 onBodyTypeChange={(bt: BodyType) => update({ bodyType: bt })}
                 onBodyRawChange={(raw: string) => update({ bodyRaw: raw })}
                 onBodyFormDataChange={(fd: KeyValuePair[]) => update({ bodyFormData: fd })}
+              />
+            )}
+
+            {activePanel === 'pre-request' && (
+              <ScriptEditor
+                value={tab.preRequestScript}
+                onChange={(v: string) => update({ preRequestScript: v })}
+                snippets={PRE_REQUEST_SNIPPETS}
+                label="Pre-request Script"
+                placeholder="// Runs before the request is sent&#10;// Use pm.environment.set() to set variables&#10;// Use console.log() for debugging"
+              />
+            )}
+
+            {activePanel === 'tests' && (
+              <ScriptEditor
+                value={tab.testScript}
+                onChange={(v: string) => update({ testScript: v })}
+                snippets={TEST_SNIPPETS}
+                label="Test Script"
+                placeholder='// Runs after the response is received&#10;pm.test("Status code is 200", () => {&#10;    pm.expect(response.code).toBe(200);&#10;});'
               />
             )}
           </div>

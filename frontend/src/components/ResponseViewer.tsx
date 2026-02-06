@@ -8,15 +8,19 @@ import {
   CheckCircle,
   XCircle,
   WrapText,
+  FlaskConical,
+  Terminal,
 } from 'lucide-react';
 import { cn, formatDuration, formatBytes } from '../lib/utils';
 import type { TabResponse } from '../store/useRequestStore';
+import TestResultsPanel from './TestResultsPanel';
+import ConsolePanel from './ConsolePanel';
 
 interface ResponseViewerProps {
   response: TabResponse;
 }
 
-type ResponseTab = 'body' | 'headers';
+type ResponseTab = 'body' | 'headers' | 'tests' | 'console';
 
 /** Minimal JSON / XML syntax highlighter (no external deps) */
 function highlightJson(json: string): string {
@@ -199,6 +203,55 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
             )}
           </button>
+          <button
+            onClick={() => setActiveTab('tests')}
+            className={cn(
+              'px-4 py-2.5 text-xs font-medium transition-colors relative',
+              activeTab === 'tests'
+                ? 'text-brand-600 dark:text-brand-400'
+                : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
+            )}
+          >
+            <div className="flex items-center gap-1.5">
+              <FlaskConical className="w-3 h-3" />
+              Tests
+              {(response.testResults?.length ?? 0) > 0 && (
+                <span className={cn(
+                  'text-[10px] font-bold',
+                  response.testResults!.every(r => r.passed)
+                    ? 'text-emerald-500'
+                    : 'text-red-500'
+                )}>
+                  ({response.testResults!.filter(r => r.passed).length}/{response.testResults!.length})
+                </span>
+              )}
+            </div>
+            {activeTab === 'tests' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('console')}
+            className={cn(
+              'px-4 py-2.5 text-xs font-medium transition-colors relative',
+              activeTab === 'console'
+                ? 'text-brand-600 dark:text-brand-400'
+                : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
+            )}
+          >
+            <div className="flex items-center gap-1.5">
+              <Terminal className="w-3 h-3" />
+              Console
+              {(response.consoleLogs?.length ?? 0) > 0 && (
+                <span className="text-[10px] font-bold text-surface-400">
+                  ({response.consoleLogs!.length})
+                </span>
+              )}
+            </div>
+            {activeTab === 'console' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
+            )}
+          </button>
         </div>
 
         {/* Actions */}
@@ -257,6 +310,17 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
               No response headers
             </div>
           )
+        )}
+
+        {activeTab === 'tests' && (
+          <TestResultsPanel
+            results={response.testResults || []}
+            scriptError={response.scriptError}
+          />
+        )}
+
+        {activeTab === 'console' && (
+          <ConsolePanel logs={response.consoleLogs || []} />
         )}
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { AssertionResult, ConsoleEntry } from '../lib/scriptEngine';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,9 @@ export interface RequestTab {
   bodyFormData: KeyValuePair[];   // form-data pairs
   timeout: number;
   isDirty: boolean;
+  // Scripting (Phase 4)
+  preRequestScript: string;      // JS script to run before sending request
+  testScript: string;            // JS script to run after receiving response
   // response state (kept per-tab so switching tabs preserves results)
   response: TabResponse | null;
   isLoading: boolean;
@@ -45,6 +49,10 @@ export interface TabResponse {
   error_type: string | null;
   retry_count: number;
   timestamp: string;
+  // Scripting results (Phase 4)
+  testResults?: AssertionResult[];
+  consoleLogs?: ConsoleEntry[];
+  scriptError?: string | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -71,6 +79,8 @@ function newTab(partial?: Partial<RequestTab>): RequestTab {
     bodyFormData: [emptyKV()],
     timeout: 10,
     isDirty: false,
+    preRequestScript: '',
+    testScript: '',
     response: null,
     isLoading: false,
     ...partial,
