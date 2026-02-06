@@ -250,9 +250,18 @@ async def get_stats(results: List[RequestResult]):
 #     }
 
 
-# Mount static files from frontend/dist (if it exists)
-frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
-if frontend_dist.exists():
+# Mount static files from frontend/dist or public (Azure deployment)
+# Try multiple paths: public (Azure), frontend/dist (local dev)
+frontend_dist = None
+for path in [
+    Path(__file__).parent.parent / "public",  # Azure deployment path
+    Path(__file__).parent.parent / "frontend" / "dist",  # Local dev path
+]:
+    if path.exists():
+        frontend_dist = path
+        break
+
+if frontend_dist:
     # Serve static assets (JS, CSS, images, etc.)
     app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
     
