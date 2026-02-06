@@ -196,3 +196,31 @@
     @apply animate-fade-in;
   }
 }
+
+/* Response syntax highlighting */
+.response-highlight {
+  @apply text-surface-200;
+}
+.response-highlight .json-string {
+  @apply text-emerald-400;
+}
+.response-highlight .json-number {
+  @apply text-amber-400;
+}
+.response-highlight .json-keyword {
+  @apply text-purple-400;
+}
+
+/* Light mode overrides */
+:root:not(.dark) .response-highlight {
+  @apply text-surface-800;
+}
+:root:not(.dark) .response-highlight .json-string {
+  @apply text-emerald-700;
+}
+:root:not(.dark) .response-highlight .json-number {
+  @apply text-amber-700;
+}
+:root:not(.dark) .response-highlight .json-keyword {
+  @apply text-purple-700;
+}
