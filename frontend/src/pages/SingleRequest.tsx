@@ -1,15 +1,29 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
 import {
   Send,
   Loader2,
   Plus,
   X,
   Copy,
+  Globe,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import apiClient from '../lib/api';
 import { useRequestStore } from '../store/useRequestStore';
 import type { HttpMethod, KeyValuePair, TabResponse, BodyType } from '../store/useRequestStore';
+import { useEnvironmentStore } from '../store/useEnvironmentStore';
+import {
+  interpolateString,
+  interpolateRecord,
+  interpolateBody,
+  hasVariables,
+  getUnresolvedVariables,
+  previewInterpolation,
+  DYNAMIC_VARIABLE_NAMES,
+} from '../lib/interpolate';
 import KeyValueEditor from '../components/KeyValueEditor';
 import BodyEditor from '../components/BodyEditor';
 import ResponseViewer from '../components/ResponseViewer';
@@ -68,10 +82,36 @@ export default function SingleRequest() {
   } = useRequestStore();
 
   const { addToHistory } = useAppStore();
+  const { activeEnv, getVariables, fetchEnvironments } = useEnvironmentStore();
   const [activePanel, setActivePanel] = useState<RequestPanel>('params');
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
+  const [showEnvPanel, setShowEnvPanel] = useState(false);
+
+  // Fetch environments on mount
+  useEffect(() => {
+    fetchEnvironments();
+  }, [fetchEnvironments]);
 
   const tab = getActiveTab();
+  const envVars = getVariables();
+
+  // Compute resolved URL preview
+  const resolvedUrl = useMemo(() => {
+    if (!tab.url || !hasVariables(tab.url)) return '';
+    return previewInterpolation(tab.url, envVars);
+  }, [tab.url, envVars]);
+
+  // Detect unresolved variables across all fields
+  const unresolvedVars = useMemo(() => {
+    const allText = [
+      tab.url,
+      ...tab.headers.filter(h => h.enabled).flatMap(h => [h.key, h.value]),
+      ...tab.params.filter(p => p.enabled).flatMap(p => [p.key, p.value]),
+      tab.bodyRaw,
+      ...tab.bodyFormData.filter(f => f.enabled).flatMap(f => [f.key, f.value]),
+    ].join(' ');
+    return getUnresolvedVariables(allText, envVars);
+  }, [tab, envVars]);
 
   const executeRequest = useCallback(async () => {
     if (!tab.url) return;
@@ -79,43 +119,50 @@ export default function SingleRequest() {
     setLoading(tabId, true);
 
     try {
-      const headers: Record<string, string> = {};
+      // Collect raw values
+      const rawHeaders: Record<string, string> = {};
       tab.headers
         .filter((h) => h.enabled && h.key)
-        .forEach((h) => { headers[h.key] = h.value; });
+        .forEach((h) => { rawHeaders[h.key] = h.value; });
 
-      const params: Record<string, string> = {};
+      const rawParams: Record<string, string> = {};
       tab.params
         .filter((p) => p.enabled && p.key)
-        .forEach((p) => { params[p.key] = p.value; });
+        .forEach((p) => { rawParams[p.key] = p.value; });
+
+      // Interpolate everything through the active environment
+      const finalUrl = interpolateString(tab.url, envVars);
+      const finalHeaders = interpolateRecord(rawHeaders, envVars);
+      const finalParams = interpolateRecord(rawParams, envVars);
 
       let body: any = null;
       if (tab.method !== 'GET' && tab.method !== 'HEAD') {
         if (tab.bodyType === 'json') {
-          try { body = JSON.parse(tab.bodyRaw); } catch { body = tab.bodyRaw; }
-          if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+          const interpolated = interpolateString(tab.bodyRaw, envVars);
+          try { body = JSON.parse(interpolated); } catch { body = interpolated; }
+          if (!finalHeaders['Content-Type']) finalHeaders['Content-Type'] = 'application/json';
         } else if (tab.bodyType === 'text' || tab.bodyType === 'xml') {
-          body = tab.bodyRaw;
-          if (tab.bodyType === 'xml' && !headers['Content-Type']) {
-            headers['Content-Type'] = 'application/xml';
+          body = interpolateString(tab.bodyRaw, envVars);
+          if (tab.bodyType === 'xml' && !finalHeaders['Content-Type']) {
+            finalHeaders['Content-Type'] = 'application/xml';
           }
         } else if (tab.bodyType === 'form-data' || tab.bodyType === 'x-www-form-urlencoded') {
           const formObj: Record<string, string> = {};
           tab.bodyFormData
             .filter((f) => f.enabled && f.key)
             .forEach((f) => { formObj[f.key] = f.value; });
-          body = formObj;
-          if (tab.bodyType === 'x-www-form-urlencoded' && !headers['Content-Type']) {
-            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+          body = interpolateBody(formObj, envVars);
+          if (tab.bodyType === 'x-www-form-urlencoded' && !finalHeaders['Content-Type']) {
+            finalHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
           }
         }
       }
 
       const res = await apiClient.post('/api/execute-request', {
         method: tab.method,
-        url: tab.url,
-        headers,
-        params,
+        url: finalUrl,
+        headers: finalHeaders,
+        params: finalParams,
         body,
         timeout: tab.timeout,
       });
@@ -151,7 +198,7 @@ export default function SingleRequest() {
         timestamp: new Date().toISOString(),
       });
     }
-  }, [tab, setLoading, setResponse, addToHistory]);
+  }, [tab, envVars, setLoading, setResponse, addToHistory]);
 
   const update = (updates: Partial<typeof tab>) => updateTab(tab.id, updates);
 
@@ -267,6 +314,77 @@ export default function SingleRequest() {
             <span className="hidden sm:inline">Send</span>
           </button>
         </div>
+
+        {/* Variable resolution preview */}
+        {hasVariables(tab.url) && (
+          <div className="mt-2 flex items-start gap-2">
+            <Globe className="w-3 h-3 mt-0.5 flex-shrink-0 text-brand-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-mono text-surface-400 truncate" title={resolvedUrl}>
+                → {resolvedUrl}
+              </p>
+              {unresolvedVars.length > 0 && (
+                <p className="text-[10px] text-amber-500 flex items-center gap-1 mt-0.5">
+                  <AlertTriangle className="w-2.5 h-2.5" />
+                  Unresolved: {unresolvedVars.join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Environment Quick-View Panel */}
+      <div className="mb-3">
+        <button
+          onClick={() => setShowEnvPanel(!showEnvPanel)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors',
+            activeEnv
+              ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/10'
+              : 'text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800'
+          )}
+        >
+          <Globe className="w-3 h-3" />
+          {activeEnv ? activeEnv.name : 'No Environment'}
+          <span className="text-[10px] text-surface-400">
+            {activeEnv ? `(${Object.keys(activeEnv.variables).length} vars)` : ''}
+          </span>
+          {showEnvPanel ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </button>
+
+        {showEnvPanel && (
+          <div className="mt-1 card !p-3">
+            {activeEnv && Object.keys(activeEnv.variables).length > 0 ? (
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-400 mb-2">
+                  {activeEnv.name} Variables
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                  {Object.entries(activeEnv.variables).map(([key, value]) => (
+                    <div key={key} className="flex items-baseline gap-1.5 text-[11px] font-mono">
+                      <span className="text-brand-500 dark:text-brand-400 font-medium">{`{{${key}}}`}</span>
+                      <span className="text-surface-400">=</span>
+                      <span className="text-surface-600 dark:text-surface-300 truncate" title={value}>
+                        {value.length > 40 ? value.slice(0, 40) + '…' : value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-surface-100 dark:border-surface-700/50 mt-2 pt-2">
+                  <p className="text-[10px] text-surface-400">
+                    Dynamic: {DYNAMIC_VARIABLE_NAMES.slice(0, 5).map(n => `{{${n}}}`).join(', ')}
+                    {DYNAMIC_VARIABLE_NAMES.length > 5 && ` +${DYNAMIC_VARIABLE_NAMES.length - 5} more`}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-surface-400 text-center py-2">
+                {activeEnv ? 'No variables defined in this environment' : 'Select an environment from the header to use variables'}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Request / Response split */}

@@ -82,6 +82,7 @@ class RequestConfigInput(BaseModel):
     params: Optional[Dict[str, str]] = {}
     body: Optional[Any] = None
     timeout: int = 10
+    env_variables: Optional[Dict[str, str]] = None  # environment variables for {{VAR}} interpolation
 
 
 class TestCaseInput(BaseModel):
@@ -104,6 +105,65 @@ class TestSuiteInput(BaseModel):
     tests: List[TestCaseInput]
 
 
+# --- Variable interpolation ---
+
+import re
+import uuid as _uuid
+import time as _time
+import random as _random
+
+_VAR_PATTERN = re.compile(r'\{\{(\$?[A-Za-z0-9_.\-]+)\}\}')
+
+_DYNAMIC_GENERATORS = {
+    '$randomUUID': lambda: str(_uuid.uuid4()),
+    '$timestamp': lambda: str(int(_time.time())),
+    '$isoTimestamp': lambda: datetime.utcnow().isoformat() + 'Z',
+    '$randomInt': lambda: str(_random.randint(0, 9999)),
+    '$randomEmail': lambda: f'user{_random.randint(0,99999)}@test.example.com',
+    '$randomString': lambda: _uuid.uuid4().hex[:8],
+    '$randomBoolean': lambda: str(_random.choice([True, False])).lower(),
+}
+
+
+def interpolate_string(text: str, variables: Dict[str, str]) -> str:
+    """Replace {{VAR}} placeholders in a string with variable values."""
+    if not text or '{{' not in text:
+        return text
+    def replacer(m):
+        name = m.group(1)
+        if name in variables:
+            return variables[name]
+        gen = _DYNAMIC_GENERATORS.get(name)
+        if gen:
+            return gen()
+        return m.group(0)  # leave unresolved
+    return _VAR_PATTERN.sub(replacer, text)
+
+
+def interpolate_dict(d: Dict[str, str], variables: Dict[str, str]) -> Dict[str, str]:
+    """Interpolate all keys and values in a dict."""
+    return {
+        interpolate_string(k, variables): interpolate_string(v, variables)
+        for k, v in d.items()
+    }
+
+
+def interpolate_body(body: Any, variables: Dict[str, str]) -> Any:
+    """Interpolate variable placeholders in a request body."""
+    if body is None:
+        return None
+    if isinstance(body, str):
+        return interpolate_string(body, variables)
+    if isinstance(body, dict):
+        return {
+            interpolate_string(str(k), variables): (
+                interpolate_string(v, variables) if isinstance(v, str) else v
+            )
+            for k, v in body.items()
+        }
+    return body
+
+
 # --- Core endpoints ---
 
 @app.get("/health")
@@ -120,15 +180,28 @@ async def execute_single_request(
 ):
     """Execute a single API request (async via httpx)."""
     try:
+        # Apply environment variable interpolation if provided
+        url = request_input.url
+        headers = request_input.headers or {}
+        params = request_input.params or {}
+        body = request_input.body
+
+        if request_input.env_variables:
+            env = request_input.env_variables
+            url = interpolate_string(url, env)
+            headers = interpolate_dict(headers, env)
+            params = interpolate_dict(params, env)
+            body = interpolate_body(body, env)
+
         retry_config = RetryConfig(max_retries=3, initial_delay=1.0)
         runner = APIRunner(auth_handler=None, retry_config=retry_config, logger=logger)
 
         config = RequestConfig(
             method=request_input.method,
-            url=request_input.url,
-            headers=request_input.headers or {},
-            params=request_input.params or {},
-            body=request_input.body,
+            url=url,
+            headers=headers,
+            params=params,
+            body=body,
             timeout=request_input.timeout,
         )
 
