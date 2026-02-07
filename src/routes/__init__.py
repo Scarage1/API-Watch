@@ -15,6 +15,7 @@ from .monitor_routes import router as monitor_router
 from .notification_routes import router as notification_router
 from .apikey_routes import router as apikey_router
 from .import_export_routes import router as import_export_router
+from .oauth_routes import router as oauth_router
 
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(auth_router)
@@ -34,3 +35,4 @@ api_v1_router.include_router(monitor_router)
 api_v1_router.include_router(notification_router)
 api_v1_router.include_router(apikey_router)
 api_v1_router.include_router(import_export_router)
+api_v1_router.include_router(oauth_router)

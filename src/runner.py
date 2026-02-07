@@ -29,10 +29,12 @@ class RequestConfig:
     url: str
     headers: Dict[str, str] = field(default_factory=dict)
     params: Dict[str, Any] = field(default_factory=dict)
-    body: Optional[Dict[str, Any]] = None
+    body: Optional[Any] = None  # str, dict, or bytes
+    body_type: str = "json"  # json | form-urlencoded | form-data | raw | xml | graphql | none
     timeout: int = 10  # seconds
     verify_ssl: bool = True
     allow_redirects: bool = True
+    use_cookies: bool = True  # auto cookie-jar management
 
 
 @dataclass
@@ -149,11 +151,21 @@ class APIRunner:
             
             result.request_headers = headers.copy()
             
+            # Inject cookies from cookie jar
+            if config.use_cookies:
+                from .cookie_jar import get_cookie_store
+                cookie_header = get_cookie_store().get_cookie_header(config.url)
+                if cookie_header:
+                    headers.setdefault("Cookie", cookie_header)
+
             # Prepare auth tuple for Basic auth
             auth = None
             if self.auth_handler and self.auth_handler.get_auth_type() == "basic":
                 auth = self.auth_handler.get_basic_auth_tuple()
             
+            # Build body kwargs based on body_type
+            body_kwargs = self._build_body_kwargs(config)
+
             # Execute request
             start_time = time.time()
             
@@ -162,11 +174,11 @@ class APIRunner:
                 url=config.url,
                 headers=headers,
                 params=config.params,
-                json=config.body if config.body else None,
                 timeout=config.timeout,
                 verify=config.verify_ssl,
                 allow_redirects=config.allow_redirects,
-                auth=auth
+                auth=auth,
+                **body_kwargs,
             )
             
             end_time = time.time()
@@ -185,7 +197,12 @@ class APIRunner:
             
             # Check if request was successful
             result.success = response.ok  # True for status codes 200-299
-            
+
+            # Capture Set-Cookie headers
+            if config.use_cookies:
+                from .cookie_jar import get_cookie_store
+                get_cookie_store().capture_from_headers(config.url, dict(response.headers))
+
             if not result.success:
                 result.error = f"HTTP {response.status_code}"
                 result.error_type = "HTTP_ERROR"
@@ -295,12 +312,22 @@ class APIRunner:
 
             result.request_headers = headers.copy()
 
+            # Inject cookies from cookie jar
+            if config.use_cookies:
+                from .cookie_jar import get_cookie_store
+                cookie_header = get_cookie_store().get_cookie_header(config.url)
+                if cookie_header:
+                    headers.setdefault("Cookie", cookie_header)
+
             # Prepare auth for basic auth
             auth = None
             if self.auth_handler and self.auth_handler.get_auth_type() == "basic":
                 creds = self.auth_handler.get_basic_auth_tuple()
                 if creds:
                     auth = httpx.BasicAuth(creds[0], creds[1])
+
+            # Build body kwargs based on body_type
+            body_kwargs = self._build_body_kwargs_httpx(config)
 
             start_time = time.time()
 
@@ -314,8 +341,8 @@ class APIRunner:
                     url=config.url,
                     headers=headers,
                     params=config.params,
-                    json=config.body if config.body else None,
                     auth=auth,
+                    **body_kwargs,
                 )
 
             end_time = time.time()
@@ -334,6 +361,11 @@ class APIRunner:
             if not result.success:
                 result.error = f"HTTP {response.status_code}"
                 result.error_type = "HTTP_ERROR"
+
+            # Capture Set-Cookie headers
+            if config.use_cookies:
+                from .cookie_jar import get_cookie_store
+                get_cookie_store().capture_from_headers(config.url, dict(response.headers))
 
         except httpx.TimeoutException as e:
             result.error = "Request timeout"
@@ -356,6 +388,57 @@ class APIRunner:
             self.logger.error(f"Unexpected error: {str(e)}")
 
         return result
+
+    # ── Body builders ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def _build_body_kwargs(config: RequestConfig) -> Dict[str, Any]:
+        """Build kwargs for requests.Session.request based on body_type."""
+        if config.body is None:
+            return {}
+        bt = (config.body_type or "json").lower()
+        if bt == "json":
+            import json as _json
+            if isinstance(config.body, str):
+                try:
+                    return {"json": _json.loads(config.body)}
+                except (ValueError, TypeError):
+                    return {"data": config.body}
+            return {"json": config.body}
+        if bt in ("form-urlencoded", "urlencoded"):
+            if isinstance(config.body, dict):
+                return {"data": config.body}
+            return {"data": config.body}
+        if bt in ("form-data", "multipart"):
+            if isinstance(config.body, dict):
+                return {"files": [(k, (None, v)) for k, v in config.body.items()]}
+            return {"data": config.body}
+        # raw, xml, graphql, text, html → send as data with explicit content-type
+        return {"data": config.body if isinstance(config.body, (str, bytes)) else str(config.body)}
+
+    @staticmethod
+    def _build_body_kwargs_httpx(config: RequestConfig) -> Dict[str, Any]:
+        """Build kwargs for httpx.AsyncClient.request based on body_type."""
+        if config.body is None:
+            return {}
+        bt = (config.body_type or "json").lower()
+        if bt == "json":
+            import json as _json
+            if isinstance(config.body, str):
+                try:
+                    return {"json": _json.loads(config.body)}
+                except (ValueError, TypeError):
+                    return {"content": config.body}
+            return {"json": config.body}
+        if bt in ("form-urlencoded", "urlencoded"):
+            if isinstance(config.body, dict):
+                return {"data": config.body}
+            return {"content": config.body}
+        if bt in ("form-data", "multipart"):
+            if isinstance(config.body, dict):
+                return {"files": [(k, (None, v)) for k, v in config.body.items()]}
+            return {"content": config.body}
+        return {"content": config.body if isinstance(config.body, (str, bytes)) else str(config.body)}
 
     def close(self) -> None:
         """Close the sync session."""

@@ -20,6 +20,7 @@ const History = lazy(() => import('./pages/History'));
 const Settings = lazy(() => import('./pages/Settings'));
 const WebSocketClient = lazy(() => import('./pages/WebSocketClient'));
 const GraphQLClient = lazy(() => import('./pages/GraphQLClient'));
+const SSEClient = lazy(() => import('./pages/SSEClient'));
 const MockServer = lazy(() => import('./pages/MockServer'));
 const Documentation = lazy(() => import('./pages/Documentation'));
 const TeamSettings = lazy(() => import('./pages/TeamSettings'));
@@ -71,6 +72,7 @@ function App() {
             <Route path="history" element={<ErrorBoundary><History /></ErrorBoundary>} />
             <Route path="websocket" element={<ErrorBoundary><WebSocketClient /></ErrorBoundary>} />
             <Route path="graphql" element={<ErrorBoundary><GraphQLClient /></ErrorBoundary>} />
+            <Route path="sse" element={<ErrorBoundary><SSEClient /></ErrorBoundary>} />
             <Route path="mocks" element={<ErrorBoundary><MockServer /></ErrorBoundary>} />
             <Route path="docs" element={<ErrorBoundary><Documentation /></ErrorBoundary>} />
             <Route path="teams" element={<ErrorBoundary><TeamSettings /></ErrorBoundary>} />

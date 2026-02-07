@@ -16,6 +16,7 @@ import {
   Radar,
   Key,
   FileUp,
+  Radio,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
@@ -28,6 +29,7 @@ const navItems = [
   { to: '/suites', icon: FolderOpen, label: 'Test Suites', section: 'main' },
   { to: '/websocket', icon: Plug, label: 'WebSocket', section: 'main' },
   { to: '/graphql', icon: Braces, label: 'GraphQL', section: 'main' },
+  { to: '/sse', icon: Radio, label: 'SSE Client', section: 'main' },
   { to: '/mocks', icon: Server, label: 'Mock Server', section: 'tools' },
   { to: '/monitors', icon: Radar, label: 'Monitors', section: 'tools' },
   { to: '/import-export', icon: FileUp, label: 'Import/Export', section: 'tools' },
