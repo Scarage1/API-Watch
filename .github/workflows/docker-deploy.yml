@@ -51,7 +51,7 @@ jobs:
       - name: Run backend tests
         env:
           TESTING: "true"
-        run: pytest tests/ -v --tb=short || true
+        run: pytest tests/ -v --tb=short
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -66,7 +66,7 @@ jobs:
 
       - name: Run frontend tests
         working-directory: frontend
-        run: npm run test || true
+        run: npm run test -- --watchAll=false
 
   # ── Job 2: Build & Push Docker Image ─────────────────────────
   build:
@@ -95,7 +95,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix=
+            type=raw,value=${{ github.sha }}
             type=raw,value=latest
 
       - name: Build and push Docker image
@@ -119,20 +119,18 @@ jobs:
 
     steps:
       - name: Azure Login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Configure Azure App Service for Container
         run: |
-          # Set container image with GHCR credentials (private registry)
+          # Set container image (GHCR package is public — no credentials needed)
           az webapp config container set \
             --name ${{ env.AZURE_WEBAPP_NAME }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --container-image-name ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            --container-registry-url https://${{ env.REGISTRY }} \
-            --container-registry-user ${{ github.actor }} \
-            --container-registry-password ${{ secrets.GITHUB_TOKEN }}
+            --container-image-name ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --container-registry-url https://${{ env.REGISTRY }}
 
           # Set application settings
           az webapp config appsettings set \
@@ -143,7 +141,8 @@ jobs:
               JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}" \
               CORS_ALLOWED_ORIGINS="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net" \
               LOG_LEVEL=INFO \
-              GUNICORN_WORKERS=2
+              ENVIRONMENT=production \
+              GUNICORN_WORKERS=1
 
       - name: Restart App Service
         run: |

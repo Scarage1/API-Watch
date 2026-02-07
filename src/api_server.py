@@ -110,17 +110,19 @@ app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
 # --- Telemetry middleware ---
 app.middleware("http")(telemetry_middleware)
 
-# --- Global exception handler (surfaces real errors in logs + response) ---
+# --- Global exception handler ---
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception):
     import traceback
     tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
     error_detail = "".join(tb)
     logger.error("Unhandled exception on %s %s:\n%s", request.method, request.url.path, error_detail)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc), "traceback": error_detail},
-    )
+    # Only expose details in debug mode — never in production
+    if os.getenv("DEBUG", "").lower() in ("true", "1"):
+        content = {"detail": str(exc), "traceback": error_detail}
+    else:
+        content = {"detail": "Internal server error"}
+    return JSONResponse(status_code=500, content=content)
 
 # --- Request body size limit ---
 MAX_BODY_SIZE = _settings.max_request_body_size
@@ -486,13 +488,16 @@ if frontend_dist:
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve React SPA for all non-API routes."""
+        # Return 404 for unmatched API / webhook routes instead of serving SPA
         if full_path.startswith("api/") or full_path.startswith("webhook"):
-            pass
+            raise HTTPException(status_code=404, detail="Not found")
 
         if "." in full_path.split("/")[-1]:
-            file_path = frontend_dist / full_path
-            if file_path.exists():
+            file_path = (frontend_dist / full_path).resolve()
+            # Prevent path traversal — file must be inside frontend_dist
+            if file_path.is_relative_to(frontend_dist.resolve()) and file_path.exists():
                 return FileResponse(file_path)
+            raise HTTPException(status_code=404, detail="Not found")
 
         return FileResponse(frontend_dist / "index.html")
 else:

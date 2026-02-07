@@ -29,17 +29,16 @@ mkdir -p /app/data /app/logs 2>/dev/null || true
 
 # ── Start gunicorn ───────────────────────────────────────────
 PORT=${PORT:-8000}
-WORKERS=${GUNICORN_WORKERS:-2}
+WORKERS=${GUNICORN_WORKERS:-1}
 TIMEOUT=${GUNICORN_TIMEOUT:-120}
 
-echo "Starting gunicorn on port $PORT with $WORKERS workers..."
+echo "Starting gunicorn on port $PORT with $WORKERS worker(s)..."
 
 exec gunicorn src.api_server:app \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind "0.0.0.0:$PORT" \
     --workers "$WORKERS" \
     --timeout "$TIMEOUT" \
-    --preload \
     --access-logfile - \
     --error-logfile - \
     --log-level info

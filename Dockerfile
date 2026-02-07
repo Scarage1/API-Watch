@@ -67,7 +67,7 @@ RUN mkdir -p /app/data /app/logs && \
 USER appuser
 
 # Health check — Azure also uses this
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
 EXPOSE ${PORT}
