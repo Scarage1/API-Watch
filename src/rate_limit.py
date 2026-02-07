@@ -1,7 +1,10 @@
 """
 Rate Limiting Middleware for API-Watch.
 
-Provides IP-based rate limiting using an in-memory sliding window counter.
+Provides IP-based rate limiting with two backends:
+  1. Redis (production) — distributed, survives restarts
+  2. In-memory (dev/test) — sliding window counter
+
 Configurable limits per endpoint group:
   - API requests:       60 req/min (default)
   - Auth endpoints:     10 req/min (stricter to prevent brute force)
@@ -14,6 +17,7 @@ Headers returned:
 """
 import time
 import asyncio
+import logging
 from collections import defaultdict
 from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
@@ -21,6 +25,8 @@ from dataclasses import dataclass
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -34,11 +40,13 @@ class RateLimitConfig:
     exempt_paths: Tuple[str, ...] = ("/health", "/docs", "/openapi.json", "/redoc")
     # Enable/disable
     enabled: bool = True
+    # Use Redis backend if available
+    use_redis: bool = True
 
 
 class SlidingWindowCounter:
     """
-    Thread-safe in-memory sliding window rate limiter.
+    In-memory sliding window rate limiter.
     Tracks request counts per key (IP address) with automatic cleanup.
     """
 
@@ -78,15 +86,62 @@ class SlidingWindowCounter:
             del self._hits[k]
 
 
+class RedisRateLimiter:
+    """
+    Redis-backed rate limiter using fixed-window counters.
+    Each key is a counter with TTL = window_seconds.
+    """
+
+    def __init__(self, window_seconds: int = 60):
+        self.window = window_seconds
+
+    async def hit(self, key: str) -> Tuple[int, int, float]:
+        from .cache import get_cache
+
+        cache = get_cache()
+        full_key = f"ratelimit:{key}"
+
+        try:
+            count = await cache.incr(full_key)
+            if count == 1:
+                # First hit — set the window expiry
+                await cache.expire(full_key, self.window)
+
+            remaining_ttl = await cache.ttl(full_key)
+            if remaining_ttl < 0:
+                remaining_ttl = self.window
+
+            reset_time = time.time() + remaining_ttl
+            return count, self.window, reset_time
+        except Exception:
+            # If Redis fails, let the request through
+            logger.warning("Redis rate limiter failed, allowing request")
+            return 0, self.window, time.time() + self.window
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     FastAPI middleware that applies IP-based rate limiting.
+    Automatically uses Redis backend when available, falls back to in-memory.
     """
 
     def __init__(self, app, config: Optional[RateLimitConfig] = None):
         super().__init__(app)
         self.config = config or RateLimitConfig()
-        self.counter = SlidingWindowCounter(self.config.window_seconds)
+        self._memory_counter = SlidingWindowCounter(self.config.window_seconds)
+        self._redis_counter = RedisRateLimiter(self.config.window_seconds) if self.config.use_redis else None
+
+    async def _get_counter(self):
+        """Return Redis counter if available, otherwise in-memory."""
+        if self._redis_counter and self.config.use_redis:
+            try:
+                from .cache import get_cache
+                cache = get_cache()
+                if await cache.ping():
+                    return self._redis_counter
+            except Exception:
+                pass
+        return self._memory_counter
 
     def _get_client_ip(self, request: Request) -> str:
         """Extract client IP address from request."""
@@ -125,8 +180,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = self._get_client_ip(request)
         limit = self._get_limit(path)
 
-        # Check rate limit
-        count, window, reset_time = await self.counter.hit(f"{client_ip}:{path.split('/')[1]}")
+        # Choose backend (Redis or in-memory) and check rate limit
+        counter = await self._get_counter()
+        count, window, reset_time = await counter.hit(f"{client_ip}:{path.split('/')[1]}")
         remaining = max(0, limit - count)
 
         if count > limit:

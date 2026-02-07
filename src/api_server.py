@@ -4,13 +4,15 @@ FastAPI server providing REST endpoints for the React frontend.
 Includes: v1 API (auth, collections, environments, history),
 legacy endpoints, webhook receiver, and SPA static file serving.
 """
-import sys
 import os
 import json
+import re
+import ipaddress
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, FileResponse
@@ -20,36 +22,46 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-# Add src to path for absolute imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+from src.config import get_settings
 from src.auth import AuthHandler, create_auth_from_config
 from src.retry import RetryConfig
 from src.runner import APIRunner, RequestConfig, RequestResult
 from src.diagnose import DiagnosisEngine
-from src.database import init_db, close_db, get_db
+from src.database import init_db, close_db, get_db, check_db_health
 from src.models import RequestHistory
-from src.jwt_auth import get_optional_user
+from src.jwt_auth import get_current_user
 from src.routes import api_v1_router, mock_catch_router
 from src.rate_limit import RateLimitMiddleware, RateLimitConfig
+from src.cache import get_cache, close_cache
+from src.storage import get_storage, close_storage
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Ensure webhook logs directory exists
-Path("logs/webhooks").mkdir(parents=True, exist_ok=True)
 
 
 # --- Lifespan ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
+    settings = get_settings()
+    logger.info("Starting %s v%s", settings.app_name, settings.app_version)
+
+    # Initialize database
     logger.info("Initializing database...")
     await init_db()
     logger.info("Database ready.")
+
+    # Warm up cache & storage (lazy singletons)
+    cache = get_cache()
+    storage = get_storage()
+    logger.info("Cache & storage initialized.")
+
     yield
+
     logger.info("Shutting down...")
+    await close_cache()
+    await close_storage()
     await close_db()
 
 
@@ -61,10 +73,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS Configuration
+# CORS Configuration — driven by Settings
+_settings = get_settings()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,13 +86,65 @@ app.add_middleware(
 
 # Rate Limiting
 rate_limit_config = RateLimitConfig(
-    default_limit=int(os.getenv("RATE_LIMIT_DEFAULT", "60")),
-    auth_limit=int(os.getenv("RATE_LIMIT_AUTH", "10")),
-    window_seconds=int(os.getenv("RATE_LIMIT_WINDOW", "60")),
-    enabled=os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
-        and os.getenv("TESTING", "").lower() != "true",
+    default_limit=_settings.rate_limit_default,
+    auth_limit=_settings.rate_limit_auth,
+    window_seconds=_settings.rate_limit_window,
+    enabled=_settings.rate_limit_enabled and not _settings.testing,
+    use_redis=bool(_settings.redis_url),
 )
 app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
+
+# --- Request body size limit ---
+MAX_BODY_SIZE = _settings.max_request_body_size
+
+
+@app.middleware("http")
+async def limit_request_body_size(request: Request, call_next):
+    """Reject requests with bodies larger than MAX_BODY_SIZE."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_BODY_SIZE:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": f"Request body too large. Maximum size is {MAX_BODY_SIZE // (1024*1024)} MB."},
+        )
+    return await call_next(request)
+
+
+# --- SSRF Protection ---
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network('127.0.0.0/8'),
+    ipaddress.ip_network('10.0.0.0/8'),
+    ipaddress.ip_network('172.16.0.0/12'),
+    ipaddress.ip_network('192.168.0.0/16'),
+    ipaddress.ip_network('169.254.0.0/16'),  # link-local
+    ipaddress.ip_network('::1/128'),          # IPv6 loopback
+    ipaddress.ip_network('fc00::/7'),         # IPv6 private
+    ipaddress.ip_network('fe80::/10'),        # IPv6 link-local
+]
+
+
+def _validate_url(url: str) -> None:
+    """Validate URL: must be http/https, must not target private/internal IPs."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise HTTPException(status_code=400, detail=f"Only http and https URLs are allowed (got '{parsed.scheme}')")
+    if not parsed.hostname:
+        raise HTTPException(status_code=400, detail="URL must have a valid hostname")
+    # Block obvious private hostnames
+    hostname = parsed.hostname.lower()
+    if hostname in ('localhost', '0.0.0.0', '[::]'):
+        raise HTTPException(status_code=400, detail="Requests to localhost/loopback addresses are not allowed")
+    # Try to parse as IP and check against private ranges
+    try:
+        ip = ipaddress.ip_address(hostname)
+        for network in _PRIVATE_NETWORKS:
+            if ip in network:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Requests to private/internal IP addresses are not allowed",
+                )
+    except ValueError:
+        pass  # Not an IP literal — that's fine (it's a hostname)
 
 # Include v1 API routes
 app.include_router(api_v1_router)
@@ -131,7 +197,7 @@ _VAR_PATTERN = re.compile(r'\{\{(\$?[A-Za-z0-9_.\-]+)\}\}')
 _DYNAMIC_GENERATORS = {
     '$randomUUID': lambda: str(_uuid.uuid4()),
     '$timestamp': lambda: str(int(_time.time())),
-    '$isoTimestamp': lambda: datetime.utcnow().isoformat() + 'Z',
+    '$isoTimestamp': lambda: datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
     '$randomInt': lambda: str(_random.randint(0, 9999)),
     '$randomEmail': lambda: f'user{_random.randint(0,99999)}@test.example.com',
     '$randomString': lambda: _uuid.uuid4().hex[:8],
@@ -182,17 +248,32 @@ def interpolate_body(body: Any, variables: Dict[str, str]) -> Any:
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "api-watch-server", "version": "2.0.0"}
+    """Health check endpoint with DB + cache connectivity."""
+    settings = get_settings()
+    db_ok = await check_db_health()
+
+    cache = get_cache()
+    cache_ok = await cache.ping()
+
+    healthy = db_ok  # DB is required; cache is optional
+    return {
+        "status": "healthy" if healthy else "degraded",
+        "service": settings.app_name,
+        "version": settings.app_version,
+        "checks": {
+            "database": "ok" if db_ok else "error",
+            "cache": "ok" if cache_ok else "unavailable",
+        },
+    }
 
 
 @app.post("/api/execute-request")
 async def execute_single_request(
     request_input: RequestConfigInput,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_optional_user),
+    user=Depends(get_current_user),
 ):
-    """Execute a single API request (async via httpx)."""
+    """Execute a single API request (async via httpx). Requires authentication."""
     try:
         # Apply environment variable interpolation if provided
         url = request_input.url
@@ -206,6 +287,9 @@ async def execute_single_request(
             headers = interpolate_dict(headers, env)
             params = interpolate_dict(params, env)
             body = interpolate_body(body, env)
+
+        # SSRF protection: validate target URL
+        _validate_url(url)
 
         retry_config = RetryConfig(max_retries=3, initial_delay=1.0)
         runner = APIRunner(auth_handler=None, retry_config=retry_config, logger=logger)
@@ -221,29 +305,30 @@ async def execute_single_request(
 
         result = await runner.execute_async(config)
 
-        # Save to history if user is authenticated
-        if user:
-            history_entry = RequestHistory(
-                owner_id=user.id,
-                request_method=result.request_method,
-                request_url=result.request_url,
-                request_headers=result.request_headers,
-                request_body=result.request_body,
-                success=result.success,
-                status_code=result.status_code,
-                response_time=result.response_time,
-                response_size=result.response_size,
-                response_body=result.response_body,
-                response_headers=result.response_headers,
-                error=result.error,
-                error_type=result.error_type,
-                retry_count=result.retry_count,
-            )
-            db.add(history_entry)
-            await db.commit()
+        # Save to history (user is always authenticated)
+        history_entry = RequestHistory(
+            owner_id=user.id,
+            request_method=result.request_method,
+            request_url=result.request_url,
+            request_headers=result.request_headers,
+            request_body=result.request_body,
+            success=result.success,
+            status_code=result.status_code,
+            response_time=result.response_time,
+            response_size=result.response_size,
+            response_body=result.response_body,
+            response_headers=result.response_headers,
+            error=result.error,
+            error_type=result.error_type,
+            retry_count=result.retry_count,
+        )
+        db.add(history_entry)
+        await db.commit()
 
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error executing request")
         raise HTTPException(status_code=500, detail=str(e))
@@ -253,10 +338,13 @@ async def execute_single_request(
 async def execute_test_suite(
     suite_input: TestSuiteInput,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_optional_user),
+    user=Depends(get_current_user),
 ) -> List[RequestResult]:
-    """Execute a test suite (async via httpx)."""
+    """Execute a test suite (async via httpx). Requires authentication."""
     try:
+        # SSRF protection: validate base URL
+        _validate_url(suite_input.base_url)
+
         auth_handler = create_auth_from_config(suite_input.auth or {})
         retry_config = RetryConfig(
             max_retries=suite_input.defaults.get('retries', 3) if suite_input.defaults else 3,
@@ -282,31 +370,31 @@ async def execute_test_suite(
             result = await runner.execute_async(config)
             results.append(result)
 
-            # Save each result to history if user is authenticated
-            if user:
-                history_entry = RequestHistory(
-                    owner_id=user.id,
-                    request_method=result.request_method,
-                    request_url=result.request_url,
-                    request_headers=result.request_headers,
-                    request_body=result.request_body,
-                    success=result.success,
-                    status_code=result.status_code,
-                    response_time=result.response_time,
-                    response_size=result.response_size,
-                    response_body=result.response_body,
-                    response_headers=result.response_headers,
-                    error=result.error,
-                    error_type=result.error_type,
-                    retry_count=result.retry_count,
-                )
-                db.add(history_entry)
+            # Save each result to history
+            history_entry = RequestHistory(
+                owner_id=user.id,
+                request_method=result.request_method,
+                request_url=result.request_url,
+                request_headers=result.request_headers,
+                request_body=result.request_body,
+                success=result.success,
+                status_code=result.status_code,
+                response_time=result.response_time,
+                response_size=result.response_size,
+                response_body=result.response_body,
+                response_headers=result.response_headers,
+                error=result.error,
+                error_type=result.error_type,
+                retry_count=result.retry_count,
+            )
+            db.add(history_entry)
 
-        if user:
-            await db.commit()
+        await db.commit()
 
         return results
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error executing test suite")
         raise HTTPException(status_code=500, detail=str(e))
@@ -412,17 +500,21 @@ async def webhook_catch_all(request: Request):
         except Exception:
             body = None
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = Path("logs/webhooks") / f"webhook_{timestamp}.json"
+    # Sanitize timestamp for safe filename
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    safe_timestamp = re.sub(r'[^a-zA-Z0-9_]', '', timestamp)
+    log_path = f"webhooks/webhook_{safe_timestamp}.json"
+
     log_data = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "endpoint": str(request.url.path),
         "method": method,
         "headers": headers,
         "body": body,
     }
-    with open(log_file, "w") as f:
-        json.dump(log_data, f, indent=2, default=str)
+
+    storage = get_storage()
+    await storage.write(log_path, json.dumps(log_data, indent=2, default=str))
 
     logger.info(f"Webhook received: {method} {request.url.path}")
 
@@ -431,8 +523,8 @@ async def webhook_catch_all(request: Request):
         content={
             "status": "received",
             "message": "Webhook received and logged successfully",
-            "log_file": str(log_file),
-            "timestamp": datetime.now().isoformat(),
+            "log_path": log_path,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
 
@@ -440,6 +532,6 @@ async def webhook_catch_all(request: Request):
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("PORT", 8000))
-    logger.info(f"Starting API server on port {port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    s = get_settings()
+    logger.info(f"Starting API server on {s.host}:{s.port}")
+    uvicorn.run(app, host=s.host, port=s.port)

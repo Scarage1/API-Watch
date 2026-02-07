@@ -3,7 +3,7 @@ Database models for API-Watch.
 Defines User, Collection, SavedRequest, Environment, and RequestHistory.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy import (
     String, Integer, Float, Boolean, Text, DateTime, ForeignKey, JSON, Index
@@ -17,6 +17,11 @@ def generate_uuid() -> str:
     return str(uuid.uuid4())
 
 
+def _utcnow() -> datetime:
+    """Return timezone-aware UTC now (replaces deprecated datetime.utcnow)."""
+    return datetime.now(timezone.utc)
+
+
 class User(Base):
     """User account."""
     __tablename__ = "users"
@@ -26,8 +31,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     collections: Mapped[List["Collection"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
@@ -43,8 +48,8 @@ class Collection(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     owner: Mapped["User"] = relationship(back_populates="collections")
@@ -73,8 +78,8 @@ class SavedRequest(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     collection_id: Mapped[str] = mapped_column(String(36), ForeignKey("collections.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     collection: Mapped["Collection"] = relationship(back_populates="requests")
@@ -93,8 +98,8 @@ class Environment(Base):
     variables: Mapped[dict] = mapped_column(JSON, default=dict)  # {"key": "value", ...}
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     owner: Mapped["User"] = relationship(back_populates="environments")
@@ -131,7 +136,7 @@ class RequestHistory(Base):
     # Metadata
     collection_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     saved_request_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
 
     # Relationships
     owner: Mapped["User"] = relationship(back_populates="history")
@@ -157,8 +162,8 @@ class MockEndpoint(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     hit_count: Mapped[int] = mapped_column(Integer, default=0)
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     __table_args__ = (
         Index("ix_mock_endpoints_owner", "owner_id"),

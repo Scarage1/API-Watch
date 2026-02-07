@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import {
   Copy,
   Check,
@@ -92,7 +93,15 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
 
   const highlighted = useMemo(() => {
     if (!response.response_body) return null;
-    return formatAndHighlight(response.response_body);
+    const raw = formatAndHighlight(response.response_body);
+    // Sanitize output to prevent XSS — only allow our syntax highlighting spans
+    return {
+      ...raw,
+      formatted: DOMPurify.sanitize(raw.formatted, {
+        ALLOWED_TAGS: ['span'],
+        ALLOWED_ATTR: ['class'],
+      }),
+    };
   }, [response.response_body]);
 
   const headerCount = Object.keys(response.response_headers).length;

@@ -138,7 +138,7 @@ async def update_mock_endpoint(
     if not mock:
         raise HTTPException(status_code=404, detail="Mock endpoint not found")
 
-    update_data = data.model_dump(exclude_none=True)
+    update_data = data.model_dump(exclude_unset=True)
     if "path" in update_data:
         update_data["path"] = update_data["path"] if update_data["path"].startswith("/") else f"/{update_data['path']}"
     if "method" in update_data:

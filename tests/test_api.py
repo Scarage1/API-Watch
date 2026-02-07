@@ -19,9 +19,9 @@ class TestHealthEndpoint:
         response = await client.get("/health")
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "healthy"
-        assert data["service"] == "api-watch-server"
-        assert data["version"] == "2.0.0"
+        assert data["status"] in ("healthy", "degraded")
+        assert data["service"] == "API-Watch"
+        assert "checks" in data
 
 
 class TestRootEndpoint:
@@ -47,7 +47,7 @@ class TestAuthRegister:
     async def test_register_success(self, client: AsyncClient):
         res = await client.post(
             "/api/v1/auth/register",
-            json={"email": "new@test.com", "username": "newuser", "password": "pass1234"},
+            json={"email": "new@test.com", "username": "newuser", "password": "TestPass1"},
         )
         assert res.status_code == 201
         data = res.json()
@@ -57,7 +57,7 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_register_duplicate(self, client: AsyncClient):
-        payload = {"email": "dup@test.com", "username": "dupuser", "password": "pass1234"}
+        payload = {"email": "dup@test.com", "username": "dupuser", "password": "TestPass1"}
         await client.post("/api/v1/auth/register", json=payload)
         res = await client.post("/api/v1/auth/register", json=payload)
         assert res.status_code == 409
@@ -68,11 +68,11 @@ class TestAuthLogin:
     async def test_login_success(self, client: AsyncClient):
         await client.post(
             "/api/v1/auth/register",
-            json={"email": "login@test.com", "username": "loginuser", "password": "pass1234"},
+            json={"email": "login@test.com", "username": "loginuser", "password": "TestPass1"},
         )
         res = await client.post(
             "/api/v1/auth/login",
-            json={"username": "loginuser", "password": "pass1234"},
+            json={"username": "loginuser", "password": "TestPass1"},
         )
         assert res.status_code == 200
         data = res.json()
@@ -83,11 +83,11 @@ class TestAuthLogin:
     async def test_login_wrong_password(self, client: AsyncClient):
         await client.post(
             "/api/v1/auth/register",
-            json={"email": "wrong@test.com", "username": "wronguser", "password": "correct"},
+            json={"email": "wrong@test.com", "username": "wronguser", "password": "Correct1x"},
         )
         res = await client.post(
             "/api/v1/auth/login",
-            json={"username": "wronguser", "password": "wrong"},
+            json={"username": "wronguser", "password": "WrongPw1x"},
         )
         assert res.status_code == 401
 
@@ -97,7 +97,7 @@ class TestAuthRefresh:
     async def test_refresh_token(self, client: AsyncClient):
         reg = await client.post(
             "/api/v1/auth/register",
-            json={"email": "ref@test.com", "username": "refuser", "password": "pass1234"},
+            json={"email": "ref@test.com", "username": "refuser", "password": "TestPass1"},
         )
         refresh = reg.json()["refresh_token"]
         res = await client.post(
@@ -289,7 +289,8 @@ class TestHistory:
 
 class TestExecuteRequest:
     @pytest.mark.asyncio
-    async def test_valid_get_request(self, client: AsyncClient):
+    async def test_valid_get_request(self, auth_client):
+        client, _, _ = auth_client
         response = await client.post(
             "/api/execute-request",
             json={"method": "GET", "url": "https://httpbin.org/get", "timeout": 15},
@@ -301,7 +302,8 @@ class TestExecuteRequest:
         assert data["status_code"] == 200
 
     @pytest.mark.asyncio
-    async def test_invalid_url(self, client: AsyncClient):
+    async def test_invalid_url(self, auth_client):
+        client, _, _ = auth_client
         response = await client.post(
             "/api/execute-request",
             json={"method": "GET", "url": "https://this-domain-definitely-does-not-exist-xyz123.com", "timeout": 3},
@@ -312,14 +314,57 @@ class TestExecuteRequest:
         assert data["error_type"] in ("CONNECTION_ERROR", "TIMEOUT", "REQUEST_ERROR")
 
     @pytest.mark.asyncio
-    async def test_missing_url(self, client: AsyncClient):
+    async def test_missing_url(self, auth_client):
+        client, _, _ = auth_client
         response = await client.post("/api/execute-request", json={"method": "GET"})
         assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_execute_request_requires_auth(self, client: AsyncClient):
+        """SEC-03: Unauthenticated requests must be rejected."""
+        response = await client.post(
+            "/api/execute-request",
+            json={"method": "GET", "url": "https://httpbin.org/get"},
+        )
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_ssrf_blocked_localhost(self, auth_client):
+        """SEC-12: Requests to localhost must be blocked."""
+        client, _, _ = auth_client
+        response = await client.post(
+            "/api/execute-request",
+            json={"method": "GET", "url": "http://localhost:8080/secret"},
+        )
+        assert response.status_code == 400
+        assert "localhost" in response.json()["detail"].lower() or "loopback" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_ssrf_blocked_private_ip(self, auth_client):
+        """SEC-12: Requests to private IPs must be blocked."""
+        client, _, _ = auth_client
+        response = await client.post(
+            "/api/execute-request",
+            json={"method": "GET", "url": "http://192.168.1.1/admin"},
+        )
+        assert response.status_code == 400
+        assert "private" in response.json()["detail"].lower() or "internal" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_ssrf_blocked_non_http(self, auth_client):
+        """SEC-12: Non-http/https schemes must be rejected."""
+        client, _, _ = auth_client
+        response = await client.post(
+            "/api/execute-request",
+            json={"method": "GET", "url": "file:///etc/passwd"},
+        )
+        assert response.status_code == 400
 
 
 class TestExecuteSuite:
     @pytest.mark.asyncio
-    async def test_simple_suite(self, client: AsyncClient):
+    async def test_simple_suite(self, auth_client):
+        client, _, _ = auth_client
         response = await client.post(
             "/api/execute-suite",
             json={
@@ -335,6 +380,19 @@ class TestExecuteSuite:
         assert isinstance(data, list)
         assert len(data) == 1
         assert data[0]["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_execute_suite_requires_auth(self, client: AsyncClient):
+        """SEC-04: Unauthenticated suite execution must be rejected."""
+        response = await client.post(
+            "/api/execute-suite",
+            json={
+                "name": "Test",
+                "base_url": "https://httpbin.org",
+                "tests": [{"id": "t1", "method": "GET", "path": "/get"}],
+            },
+        )
+        assert response.status_code == 401
 
 
 class TestDiagnoseEndpoint:

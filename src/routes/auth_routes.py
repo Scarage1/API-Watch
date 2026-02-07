@@ -1,7 +1,8 @@
 """
-Authentication routes — register, login, refresh, profile.
+Authentication routes — register, login, refresh, profile, logout.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +12,7 @@ from ..jwt_auth import (
     RegisterRequest, LoginRequest, TokenResponse, RefreshRequest,
     hash_password, verify_password,
     create_access_token, create_refresh_token, decode_token,
-    get_current_user,
+    get_current_user, blacklist_token,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -122,3 +123,26 @@ async def get_profile(user: User = Depends(get_current_user)):
         "username": user.username,
         "created_at": user.created_at.isoformat(),
     }
+
+
+_security = HTTPBearer()
+
+
+@router.post("/logout", status_code=200)
+async def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(_security),
+):
+    """Logout — revoke the current access token."""
+    payload = decode_token(credentials.credentials)
+    jti = payload.get("jti")
+    if not jti:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token does not contain a JTI claim",
+        )
+    # Blacklist the token for its remaining lifetime
+    exp = payload.get("exp", 0)
+    import time
+    remaining = max(int(exp - time.time()), 60)  # at least 60s
+    await blacklist_token(jti, ttl=remaining)
+    return {"detail": "Successfully logged out"}
