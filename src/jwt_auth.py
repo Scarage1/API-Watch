@@ -2,23 +2,35 @@
 JWT Authentication for API-Watch users.
 Handles registration, login, token creation/verification.
 """
+import logging
 import os
-from datetime import datetime, timedelta
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 import bcrypt
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import get_db
 from .models import User
 
-# Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "api-watch-dev-secret-change-in-production")
+logger = logging.getLogger(__name__)
+
+# --- Validation patterns ---
+_PASSWORD_MIN_LENGTH = 8
+_PASSWORD_PATTERN = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$')
+_EMAIL_PATTERN = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
+# Configuration — require explicit secret in production
+_env_secret = os.getenv("JWT_SECRET_KEY", "")
+if not _env_secret and os.getenv("TESTING") != "1":
+    raise RuntimeError("JWT_SECRET_KEY environment variable is required")
+SECRET_KEY = _env_secret or "test-only-insecure-key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
@@ -33,6 +45,35 @@ class RegisterRequest(BaseModel):
     email: str
     username: str
     password: str
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _EMAIL_PATTERN.match(v):
+            raise ValueError('Invalid email address format')
+        return v
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < _PASSWORD_MIN_LENGTH:
+            raise ValueError(f'Password must be at least {_PASSWORD_MIN_LENGTH} characters')
+        if not _PASSWORD_PATTERN.match(v):
+            raise ValueError('Password must contain at least one uppercase letter, one lowercase letter, and one digit')
+        return v
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 3:
+            raise ValueError('Username must be at least 3 characters')
+        if len(v) > 50:
+            raise ValueError('Username must be 50 characters or fewer')
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError('Username can only contain letters, numbers, hyphens, and underscores')
+        return v
 
 
 class LoginRequest(BaseModel):
@@ -62,7 +103,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(user_id: str, username: str) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user_id,
         "username": username,
@@ -73,7 +114,7 @@ def create_access_token(user_id: str, username: str) -> str:
 
 
 def create_refresh_token(user_id: str) -> str:
-    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     payload = {
         "sub": user_id,
         "type": "refresh",

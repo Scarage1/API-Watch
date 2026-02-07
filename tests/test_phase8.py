@@ -12,11 +12,11 @@ async def test_mock_crud_lifecycle(client: AsyncClient):
     # Register + login
     await client.post(
         "/api/v1/auth/register",
-        json={"email": "mock@test.dev", "username": "mockuser", "password": "testpass123"},
+        json={"email": "mock@test.dev", "username": "mockuser", "password": "TestPass123"},
     )
     login = await client.post(
         "/api/v1/auth/login",
-        json={"username": "mockuser", "password": "testpass123"},
+        json={"username": "mockuser", "password": "TestPass123"},
     )
     token = login.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -73,11 +73,11 @@ async def test_mock_catch_all_serves_response(client: AsyncClient):
     # Register + login
     await client.post(
         "/api/v1/auth/register",
-        json={"email": "mockserve@test.dev", "username": "mockserve", "password": "testpass123"},
+        json={"email": "mockserve@test.dev", "username": "mockserve", "password": "TestPass123"},
     )
     login = await client.post(
         "/api/v1/auth/login",
-        json={"username": "mockserve", "password": "testpass123"},
+        json={"username": "mockserve", "password": "TestPass123"},
     )
     token = login.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -118,11 +118,11 @@ async def test_mock_path_normalisation(client: AsyncClient):
     """Test that paths are normalised with leading slash."""
     await client.post(
         "/api/v1/auth/register",
-        json={"email": "norm@test.dev", "username": "normuser", "password": "testpass123"},
+        json={"email": "norm@test.dev", "username": "normuser", "password": "TestPass123"},
     )
     login = await client.post(
         "/api/v1/auth/login",
-        json={"username": "normuser", "password": "testpass123"},
+        json={"username": "normuser", "password": "TestPass123"},
     )
     token = login.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

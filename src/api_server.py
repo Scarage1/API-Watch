@@ -4,13 +4,15 @@ FastAPI server providing REST endpoints for the React frontend.
 Includes: v1 API (auth, collections, environments, history),
 legacy endpoints, webhook receiver, and SPA static file serving.
 """
-import sys
 import os
 import json
+import re
+import ipaddress
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, FileResponse
@@ -20,16 +22,13 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-# Add src to path for absolute imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from src.auth import AuthHandler, create_auth_from_config
 from src.retry import RetryConfig
 from src.runner import APIRunner, RequestConfig, RequestResult
 from src.diagnose import DiagnosisEngine
 from src.database import init_db, close_db, get_db
 from src.models import RequestHistory
-from src.jwt_auth import get_optional_user
+from src.jwt_auth import get_current_user
 from src.routes import api_v1_router, mock_catch_router
 from src.rate_limit import RateLimitMiddleware, RateLimitConfig
 
@@ -61,10 +60,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS Configuration
+# CORS Configuration — env-configurable origin whitelist (no more wildcard)
+_cors_origins_raw = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000")
+CORS_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +81,58 @@ rate_limit_config = RateLimitConfig(
         and os.getenv("TESTING", "").lower() != "true",
 )
 app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
+
+# --- Request body size limit (10 MB default) ---
+MAX_BODY_SIZE = int(os.getenv("MAX_REQUEST_BODY_SIZE", str(10 * 1024 * 1024)))  # 10 MB
+
+
+@app.middleware("http")
+async def limit_request_body_size(request: Request, call_next):
+    """Reject requests with bodies larger than MAX_BODY_SIZE."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_BODY_SIZE:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": f"Request body too large. Maximum size is {MAX_BODY_SIZE // (1024*1024)} MB."},
+        )
+    return await call_next(request)
+
+
+# --- SSRF Protection ---
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network('127.0.0.0/8'),
+    ipaddress.ip_network('10.0.0.0/8'),
+    ipaddress.ip_network('172.16.0.0/12'),
+    ipaddress.ip_network('192.168.0.0/16'),
+    ipaddress.ip_network('169.254.0.0/16'),  # link-local
+    ipaddress.ip_network('::1/128'),          # IPv6 loopback
+    ipaddress.ip_network('fc00::/7'),         # IPv6 private
+    ipaddress.ip_network('fe80::/10'),        # IPv6 link-local
+]
+
+
+def _validate_url(url: str) -> None:
+    """Validate URL: must be http/https, must not target private/internal IPs."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise HTTPException(status_code=400, detail=f"Only http and https URLs are allowed (got '{parsed.scheme}')")
+    if not parsed.hostname:
+        raise HTTPException(status_code=400, detail="URL must have a valid hostname")
+    # Block obvious private hostnames
+    hostname = parsed.hostname.lower()
+    if hostname in ('localhost', '0.0.0.0', '[::]'):
+        raise HTTPException(status_code=400, detail="Requests to localhost/loopback addresses are not allowed")
+    # Try to parse as IP and check against private ranges
+    try:
+        ip = ipaddress.ip_address(hostname)
+        for network in _PRIVATE_NETWORKS:
+            if ip in network:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Requests to private/internal IP addresses are not allowed",
+                )
+    except ValueError:
+        pass  # Not an IP literal — that's fine (it's a hostname)
 
 # Include v1 API routes
 app.include_router(api_v1_router)
@@ -131,7 +185,7 @@ _VAR_PATTERN = re.compile(r'\{\{(\$?[A-Za-z0-9_.\-]+)\}\}')
 _DYNAMIC_GENERATORS = {
     '$randomUUID': lambda: str(_uuid.uuid4()),
     '$timestamp': lambda: str(int(_time.time())),
-    '$isoTimestamp': lambda: datetime.utcnow().isoformat() + 'Z',
+    '$isoTimestamp': lambda: datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
     '$randomInt': lambda: str(_random.randint(0, 9999)),
     '$randomEmail': lambda: f'user{_random.randint(0,99999)}@test.example.com',
     '$randomString': lambda: _uuid.uuid4().hex[:8],
@@ -190,9 +244,9 @@ async def health_check():
 async def execute_single_request(
     request_input: RequestConfigInput,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_optional_user),
+    user=Depends(get_current_user),
 ):
-    """Execute a single API request (async via httpx)."""
+    """Execute a single API request (async via httpx). Requires authentication."""
     try:
         # Apply environment variable interpolation if provided
         url = request_input.url
@@ -206,6 +260,9 @@ async def execute_single_request(
             headers = interpolate_dict(headers, env)
             params = interpolate_dict(params, env)
             body = interpolate_body(body, env)
+
+        # SSRF protection: validate target URL
+        _validate_url(url)
 
         retry_config = RetryConfig(max_retries=3, initial_delay=1.0)
         runner = APIRunner(auth_handler=None, retry_config=retry_config, logger=logger)
@@ -221,29 +278,30 @@ async def execute_single_request(
 
         result = await runner.execute_async(config)
 
-        # Save to history if user is authenticated
-        if user:
-            history_entry = RequestHistory(
-                owner_id=user.id,
-                request_method=result.request_method,
-                request_url=result.request_url,
-                request_headers=result.request_headers,
-                request_body=result.request_body,
-                success=result.success,
-                status_code=result.status_code,
-                response_time=result.response_time,
-                response_size=result.response_size,
-                response_body=result.response_body,
-                response_headers=result.response_headers,
-                error=result.error,
-                error_type=result.error_type,
-                retry_count=result.retry_count,
-            )
-            db.add(history_entry)
-            await db.commit()
+        # Save to history (user is always authenticated)
+        history_entry = RequestHistory(
+            owner_id=user.id,
+            request_method=result.request_method,
+            request_url=result.request_url,
+            request_headers=result.request_headers,
+            request_body=result.request_body,
+            success=result.success,
+            status_code=result.status_code,
+            response_time=result.response_time,
+            response_size=result.response_size,
+            response_body=result.response_body,
+            response_headers=result.response_headers,
+            error=result.error,
+            error_type=result.error_type,
+            retry_count=result.retry_count,
+        )
+        db.add(history_entry)
+        await db.commit()
 
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error executing request")
         raise HTTPException(status_code=500, detail=str(e))
@@ -253,10 +311,13 @@ async def execute_single_request(
 async def execute_test_suite(
     suite_input: TestSuiteInput,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_optional_user),
+    user=Depends(get_current_user),
 ) -> List[RequestResult]:
-    """Execute a test suite (async via httpx)."""
+    """Execute a test suite (async via httpx). Requires authentication."""
     try:
+        # SSRF protection: validate base URL
+        _validate_url(suite_input.base_url)
+
         auth_handler = create_auth_from_config(suite_input.auth or {})
         retry_config = RetryConfig(
             max_retries=suite_input.defaults.get('retries', 3) if suite_input.defaults else 3,
@@ -282,31 +343,31 @@ async def execute_test_suite(
             result = await runner.execute_async(config)
             results.append(result)
 
-            # Save each result to history if user is authenticated
-            if user:
-                history_entry = RequestHistory(
-                    owner_id=user.id,
-                    request_method=result.request_method,
-                    request_url=result.request_url,
-                    request_headers=result.request_headers,
-                    request_body=result.request_body,
-                    success=result.success,
-                    status_code=result.status_code,
-                    response_time=result.response_time,
-                    response_size=result.response_size,
-                    response_body=result.response_body,
-                    response_headers=result.response_headers,
-                    error=result.error,
-                    error_type=result.error_type,
-                    retry_count=result.retry_count,
-                )
-                db.add(history_entry)
+            # Save each result to history
+            history_entry = RequestHistory(
+                owner_id=user.id,
+                request_method=result.request_method,
+                request_url=result.request_url,
+                request_headers=result.request_headers,
+                request_body=result.request_body,
+                success=result.success,
+                status_code=result.status_code,
+                response_time=result.response_time,
+                response_size=result.response_size,
+                response_body=result.response_body,
+                response_headers=result.response_headers,
+                error=result.error,
+                error_type=result.error_type,
+                retry_count=result.retry_count,
+            )
+            db.add(history_entry)
 
-        if user:
-            await db.commit()
+        await db.commit()
 
         return results
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error executing test suite")
         raise HTTPException(status_code=500, detail=str(e))
@@ -412,16 +473,25 @@ async def webhook_catch_all(request: Request):
         except Exception:
             body = None
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = Path("logs/webhooks") / f"webhook_{timestamp}.json"
+    # Sanitize timestamp for safe filename (SEC-12)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    safe_timestamp = re.sub(r'[^a-zA-Z0-9_]', '', timestamp)
+    log_file = Path("logs/webhooks") / f"webhook_{safe_timestamp}.json"
+    # Verify the resolved path is within logs/webhooks (prevent path traversal)
+    resolved = log_file.resolve()
+    expected_parent = Path("logs/webhooks").resolve()
+    if not str(resolved).startswith(str(expected_parent)):
+        logger.error(f"Path traversal attempt in webhook log: {log_file}")
+        raise HTTPException(status_code=400, detail="Invalid webhook path")
+
     log_data = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "endpoint": str(request.url.path),
         "method": method,
         "headers": headers,
         "body": body,
     }
-    with open(log_file, "w") as f:
+    with open(resolved, "w") as f:
         json.dump(log_data, f, indent=2, default=str)
 
     logger.info(f"Webhook received: {method} {request.url.path}")
@@ -431,8 +501,8 @@ async def webhook_catch_all(request: Request):
         content={
             "status": "received",
             "message": "Webhook received and logged successfully",
-            "log_file": str(log_file),
-            "timestamp": datetime.now().isoformat(),
+            "log_file": str(resolved),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
 

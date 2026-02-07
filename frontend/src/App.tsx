@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import Layout from './components/Layout';
 import AuthPage from './pages/AuthPage';
+import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import CommandPalette from './components/CommandPalette';
 import OnboardingModal from './components/OnboardingModal';
@@ -58,16 +59,16 @@ function App() {
         <Routes>
           <Route path="/auth" element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Dashboard />} />
-            <Route path="request" element={<SingleRequest />} />
-            <Route path="suites" element={<TestSuites />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="history" element={<History />} />
-            <Route path="websocket" element={<WebSocketClient />} />
-            <Route path="graphql" element={<GraphQLClient />} />
-            <Route path="mocks" element={<MockServer />} />
-            <Route path="docs" element={<Documentation />} />
-            <Route path="settings" element={<Settings />} />
+            <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
+            <Route path="request" element={<ErrorBoundary><SingleRequest /></ErrorBoundary>} />
+            <Route path="suites" element={<ErrorBoundary><TestSuites /></ErrorBoundary>} />
+            <Route path="analytics" element={<ErrorBoundary><Analytics /></ErrorBoundary>} />
+            <Route path="history" element={<ErrorBoundary><History /></ErrorBoundary>} />
+            <Route path="websocket" element={<ErrorBoundary><WebSocketClient /></ErrorBoundary>} />
+            <Route path="graphql" element={<ErrorBoundary><GraphQLClient /></ErrorBoundary>} />
+            <Route path="mocks" element={<ErrorBoundary><MockServer /></ErrorBoundary>} />
+            <Route path="docs" element={<ErrorBoundary><Documentation /></ErrorBoundary>} />
+            <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
           </Route>
         </Routes>
       </Suspense>

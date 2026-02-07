@@ -12,6 +12,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite://"
 # Disable rate limiting during tests
 os.environ["TESTING"] = "true"
+# Set JWT secret for tests (must be set before importing jwt_auth)
+os.environ["JWT_SECRET_KEY"] = "test-jwt-secret-key-for-testing-only"
+# Set CORS origins for tests
+os.environ["CORS_ALLOWED_ORIGINS"] = "http://test,http://localhost:5173"
 
 import pytest
 import pytest_asyncio
@@ -53,7 +57,7 @@ async def auth_client(client: AsyncClient):
     """Client with a pre-registered and authenticated user. Returns (client, token, user)."""
     res = await client.post(
         "/api/v1/auth/register",
-        json={"email": "test@apiwatch.dev", "username": "testuser", "password": "testpass123"},
+        json={"email": "test@apiwatch.dev", "username": "testuser", "password": "TestPass123"},
     )
     data = res.json()
     token = data["access_token"]
