@@ -61,6 +61,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ErrorBoundary>
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
           <Route path="/auth" element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />} />
@@ -84,6 +85,7 @@ function App() {
           </Route>
         </Routes>
       </Suspense>
+      </ErrorBoundary>
       <ToastContainer />
       <CommandPalette />
       <OnboardingModal />
