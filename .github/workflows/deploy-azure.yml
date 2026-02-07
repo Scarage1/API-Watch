@@ -88,9 +88,10 @@ jobs:
             --name ${{ env.AZURE_WEBAPP_NAME }} \
             --src-path backend-deploy.zip \
             --type zip \
-            --async true
-          echo "Deployment initiated. Waiting for Oryx build + startup..."
-          sleep 180
+            --clean true \
+            --restart true \
+            --async false \
+            --timeout 600
 
       - name: Test deployment
         run: |
