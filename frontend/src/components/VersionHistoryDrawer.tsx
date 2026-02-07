@@ -6,7 +6,7 @@ import {
   X, History, Plus, RotateCcw, Loader2, ChevronRight,
   Package, Clock,
 } from 'lucide-react';
-import apiClient from '../lib/api';
+import apiClient, { extractDetail } from '../lib/api';
 import { toast } from '../store/useToastStore';
 
 interface Snapshot {
@@ -69,7 +69,7 @@ export default function VersionHistoryDrawer({
       setShowCreate(false);
       fetchSnapshots();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to create snapshot');
+      toast.error(extractDetail(err, 'Failed to create snapshot'));
     } finally {
       setCreating(false);
     }
@@ -84,7 +84,7 @@ export default function VersionHistoryDrawer({
       onRestored?.();
       fetchSnapshots();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to restore');
+      toast.error(extractDetail(err, 'Failed to restore'));
     } finally {
       setRestoringId(null);
     }

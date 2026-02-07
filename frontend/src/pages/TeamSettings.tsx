@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import {
   Users, UserPlus, Trash2, Mail, X,
 } from 'lucide-react';
-import apiClient from '../lib/api';
+import apiClient, { extractDetail } from '../lib/api';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
 import { toast } from '../store/useToastStore';
 import { cn } from '../lib/utils';
@@ -83,7 +83,7 @@ export default function TeamSettings() {
       setInviteEmail('');
       fetchData();
     } catch (err: any) {
-      toast.error('Invite failed', err.response?.data?.detail || 'Unknown error');
+      toast.error('Invite failed', extractDetail(err, 'Unknown error'));
     } finally {
       setInviting(false);
     }
@@ -96,7 +96,7 @@ export default function TeamSettings() {
       toast.success('Member removed');
       fetchData();
     } catch (err: any) {
-      toast.error('Failed', err.response?.data?.detail || 'Unknown error');
+      toast.error('Failed', extractDetail(err, 'Unknown error'));
     }
   };
 
@@ -119,7 +119,7 @@ export default function TeamSettings() {
       toast.success('Role updated');
       fetchData();
     } catch (err: any) {
-      toast.error('Failed', err.response?.data?.detail || 'Unknown error');
+      toast.error('Failed', extractDetail(err, 'Unknown error'));
     }
   };
 

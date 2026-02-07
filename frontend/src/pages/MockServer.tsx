@@ -8,7 +8,7 @@ import {
   ToggleLeft, ToggleRight, Copy, Check, Zap, Activity,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import apiClient from '../lib/api';
+import apiClient, { extractDetail } from '../lib/api';
 import { toast } from '../store/useToastStore';
 
 interface MockEndpoint {
@@ -118,7 +118,7 @@ export default function MockServer() {
       setForm(emptyForm);
       loadEndpoints();
     } catch (err: any) {
-      toast.error('Error', err?.response?.data?.detail || 'Failed to save');
+      toast.error('Error', extractDetail(err, 'Failed to save'));
     } finally {
       setSaving(false);
     }

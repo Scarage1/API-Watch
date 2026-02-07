@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import apiClient from '../lib/api';
+import apiClient, { extractDetail } from '../lib/api';
 
 interface User {
   id: string;
@@ -53,7 +53,7 @@ export const useAuthStore = create<AuthState>()(
           }
           useWorkspaceStore.getState().fetchWorkspaces();
         } catch (err: any) {
-          const message = err.response?.data?.detail || 'Login failed';
+          const message = extractDetail(err, 'Login failed');
           set({ isLoading: false, error: message });
           throw new Error(message);
         }
@@ -78,7 +78,7 @@ export const useAuthStore = create<AuthState>()(
           }
           useWorkspaceStore.getState().fetchWorkspaces();
         } catch (err: any) {
-          const message = err.response?.data?.detail || 'Registration failed';
+          const message = extractDetail(err, 'Registration failed');
           set({ isLoading: false, error: message });
           throw new Error(message);
         }

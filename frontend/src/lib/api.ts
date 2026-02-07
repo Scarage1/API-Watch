@@ -3,6 +3,19 @@ import { toast } from '../store/useToastStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
+/**
+ * Extract a human-readable error message from a FastAPI error response.
+ * FastAPI returns `detail` as a string (e.g. "Not found") for simple errors,
+ * or as an array of objects `{type, loc, msg, input, ctx}` for validation errors (422).
+ */
+export function extractDetail(err: any, fallback = 'Something went wrong'): string {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail))
+    return detail.map((e: any) => e.msg || String(e)).join('; ');
+  return fallback;
+}
+
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,

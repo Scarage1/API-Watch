@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import {
   X, Share2, GitFork, Trash2, Loader2, Users, Eye, Pencil,
 } from 'lucide-react';
-import apiClient from '../lib/api';
+import apiClient, { extractDetail } from '../lib/api';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
 import { toast } from '../store/useToastStore';
 
@@ -69,7 +69,7 @@ export default function ShareCollectionDialog({
       setSelectedWsId('');
       fetchShares();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to share');
+      toast.error(extractDetail(err, 'Failed to share'));
     } finally {
       setSharing(false);
     }
@@ -93,7 +93,7 @@ export default function ShareCollectionDialog({
       onForked?.();
       onClose();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to fork');
+      toast.error(extractDetail(err, 'Failed to fork'));
     } finally {
       setForking(false);
     }
