@@ -110,6 +110,18 @@ app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
 # --- Telemetry middleware ---
 app.middleware("http")(telemetry_middleware)
 
+# --- Global exception handler (surfaces real errors in logs + response) ---
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    import traceback
+    tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    error_detail = "".join(tb)
+    logger.error("Unhandled exception on %s %s:\n%s", request.method, request.url.path, error_detail)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "traceback": error_detail},
+    )
+
 # --- Request body size limit ---
 MAX_BODY_SIZE = _settings.max_request_body_size
 
