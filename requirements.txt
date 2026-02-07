@@ -28,6 +28,9 @@ psycopg2-binary>=2.9.9
 # Cache — Redis (prod, optional for dev)
 redis>=5.0.0
 
+# Scheduling
+croniter>=1.4.0
+
 # Authentication
 python-jose[cryptography]>=3.3.0
 bcrypt>=4.0.0

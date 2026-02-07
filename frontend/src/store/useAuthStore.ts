@@ -6,6 +6,7 @@ interface User {
   id: string;
   email: string;
   username: string;
+  default_workspace_id?: string;
 }
 
 interface AuthState {
@@ -45,6 +46,12 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          // Initialize workspace store after login
+          const { useWorkspaceStore } = await import('./useWorkspaceStore');
+          if (user.default_workspace_id) {
+            useWorkspaceStore.getState().switchWorkspace(user.default_workspace_id);
+          }
+          useWorkspaceStore.getState().fetchWorkspaces();
         } catch (err: any) {
           const message = err.response?.data?.detail || 'Login failed';
           set({ isLoading: false, error: message });
@@ -64,6 +71,12 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          // Initialize workspace store after registration
+          const { useWorkspaceStore } = await import('./useWorkspaceStore');
+          if (user.default_workspace_id) {
+            useWorkspaceStore.getState().switchWorkspace(user.default_workspace_id);
+          }
+          useWorkspaceStore.getState().fetchWorkspaces();
         } catch (err: any) {
           const message = err.response?.data?.detail || 'Registration failed';
           set({ isLoading: false, error: message });

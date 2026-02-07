@@ -21,7 +21,13 @@ from src.config import get_settings
 from src.database import Base
 
 # Import all models so Base.metadata is fully populated
-from src.models import User, Collection, SavedRequest, Environment, RequestHistory, MockEndpoint  # noqa: F401
+from src.models import (  # noqa: F401
+    User, Collection, SavedRequest, Environment, RequestHistory, MockEndpoint,
+    Organization, Team, TeamMember, Workspace, WorkspaceMember, Invitation,
+    CollectionShare, CollectionSnapshot, ActivityLog,
+    Monitor, MonitorRun, NotificationChannel, MonitorNotification,
+    ApiKey,
+)
 
 # Alembic Config object
 config = context.config

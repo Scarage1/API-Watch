@@ -1,6 +1,10 @@
 // ── Script Execution Engine ─────────────────────────────────────────────────
 // Sandboxed JavaScript runner with Postman-like expect() API, console capture,
 // and environment variable access for pre-request and post-request test scripts.
+//
+// Two execution modes:
+//   1. runScript()       – inline Function() (fast, same-thread, legacy)
+//   2. runScriptWorker() – Web Worker sandbox (isolated, async, recommended)
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -324,6 +328,77 @@ function _validateSchema(data: unknown, schema: Record<string, unknown>): boolea
   }
 
   return true;
+}
+
+// ── Web Worker Sandbox Runner ────────────────────────────────────────────────
+
+let _worker: Worker | null = null;
+let _workerIdCounter = 0;
+
+function getScriptWorker(): Worker {
+  if (!_worker) {
+    _worker = new Worker(
+      new URL('../workers/scriptWorker.ts', import.meta.url),
+      { type: 'module' },
+    );
+  }
+  return _worker;
+}
+
+/**
+ * Run a script inside a Web Worker sandbox.
+ * Returns a Promise that resolves with the ScriptResult.
+ * The Worker has NO access to DOM, fetch, localStorage etc.
+ * A per-call timeout (default 10 s) prevents infinite loops.
+ */
+export function runScriptWorker(
+  script: string,
+  context: ScriptContext,
+  timeoutMs = 10_000,
+): Promise<ScriptResult> {
+  if (!script.trim()) {
+    return Promise.resolve({
+      assertions: [],
+      consoleLogs: [],
+      error: null,
+      duration: 0,
+      updatedVariables: { ...context.envVariables },
+    });
+  }
+
+  return new Promise<ScriptResult>((resolve) => {
+    const id = String(++_workerIdCounter);
+    const worker = getScriptWorker();
+
+    const timer = setTimeout(() => {
+      // Kill the stuck worker and create a fresh one
+      _worker?.terminate();
+      _worker = null;
+      resolve({
+        assertions: [],
+        consoleLogs: [],
+        error: `Script timed out after ${timeoutMs}ms`,
+        duration: timeoutMs,
+        updatedVariables: { ...context.envVariables },
+      });
+    }, timeoutMs);
+
+    const handler = (e: MessageEvent) => {
+      if (e.data?.id !== id) return;
+      clearTimeout(timer);
+      worker.removeEventListener('message', handler);
+      resolve(e.data.result as ScriptResult);
+    };
+
+    worker.addEventListener('message', handler);
+    worker.postMessage({ id, script, context });
+  });
+}
+
+/** Terminate the cached worker (for cleanup / tests). */
+export function terminateScriptWorker(): void {
+  _worker?.terminate();
+  _worker = null;
 }
 
 // ── Pre-built test snippets ──────────────────────────────────────────────────

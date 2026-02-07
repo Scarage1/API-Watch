@@ -20,8 +20,14 @@ const History = lazy(() => import('./pages/History'));
 const Settings = lazy(() => import('./pages/Settings'));
 const WebSocketClient = lazy(() => import('./pages/WebSocketClient'));
 const GraphQLClient = lazy(() => import('./pages/GraphQLClient'));
+const SSEClient = lazy(() => import('./pages/SSEClient'));
 const MockServer = lazy(() => import('./pages/MockServer'));
 const Documentation = lazy(() => import('./pages/Documentation'));
+const TeamSettings = lazy(() => import('./pages/TeamSettings'));
+const ActivityFeed = lazy(() => import('./pages/ActivityFeed'));
+const MonitorDashboard = lazy(() => import('./pages/MonitorDashboard'));
+const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'));
+const ImportExportPage = lazy(() => import('./pages/ImportExportPage'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -66,8 +72,14 @@ function App() {
             <Route path="history" element={<ErrorBoundary><History /></ErrorBoundary>} />
             <Route path="websocket" element={<ErrorBoundary><WebSocketClient /></ErrorBoundary>} />
             <Route path="graphql" element={<ErrorBoundary><GraphQLClient /></ErrorBoundary>} />
+            <Route path="sse" element={<ErrorBoundary><SSEClient /></ErrorBoundary>} />
             <Route path="mocks" element={<ErrorBoundary><MockServer /></ErrorBoundary>} />
             <Route path="docs" element={<ErrorBoundary><Documentation /></ErrorBoundary>} />
+            <Route path="teams" element={<ErrorBoundary><TeamSettings /></ErrorBoundary>} />
+            <Route path="activity" element={<ErrorBoundary><ActivityFeed /></ErrorBoundary>} />
+            <Route path="monitors" element={<ErrorBoundary><MonitorDashboard /></ErrorBoundary>} />
+            <Route path="api-keys" element={<ErrorBoundary><ApiKeysPage /></ErrorBoundary>} />
+            <Route path="import-export" element={<ErrorBoundary><ImportExportPage /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
           </Route>
         </Routes>

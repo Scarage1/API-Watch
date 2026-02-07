@@ -1,0 +1,81 @@
+# API-Watch CI/CD Integration — Azure DevOps Pipeline
+#
+# This pipeline runs API-Watch monitors and publishes JUnit results.
+#
+# Prerequisites:
+# 1. Create variable group "api-watch" with:
+#    - APIWATCH_BASE_URL: Your API-Watch server URL
+#    - APIWATCH_API_KEY: API key (mark as secret)
+#    - APIWATCH_MONITOR_ID: Monitor to run
+
+trigger:
+  branches:
+    include:
+      - main
+
+schedules:
+  - cron: '0 */6 * * *'
+    displayName: Every 6 hours
+    branches:
+      include:
+        - main
+    always: true
+
+variables:
+  - group: api-watch
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: Bash@3
+    displayName: 'Trigger Monitor Run'
+    inputs:
+      targetType: inline
+      script: |
+        curl -s -X POST \
+          "$(APIWATCH_BASE_URL)/api/v1/monitors/$(APIWATCH_MONITOR_ID)/trigger" \
+          -H "X-API-Key: $(APIWATCH_API_KEY)" \
+          -H "Content-Type: application/json"
+
+  - task: Bash@3
+    displayName: 'Wait for Completion'
+    inputs:
+      targetType: inline
+      script: sleep 30
+
+  - task: Bash@3
+    displayName: 'Fetch Run & Export JUnit'
+    inputs:
+      targetType: inline
+      script: |
+        RUNS=$(curl -s \
+          "$(APIWATCH_BASE_URL)/api/v1/monitors/$(APIWATCH_MONITOR_ID)/runs?limit=1" \
+          -H "X-API-Key: $(APIWATCH_API_KEY)")
+        RUN_ID=$(echo "$RUNS" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+        STATUS=$(echo "$RUNS" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['status'])")
+
+        curl -s \
+          "$(APIWATCH_BASE_URL)/api/v1/import-export/export/junit/$(APIWATCH_MONITOR_ID)/runs/$RUN_ID" \
+          -H "X-API-Key: $(APIWATCH_API_KEY)" \
+          -o $(System.DefaultWorkingDirectory)/test-results.xml
+
+        echo "##vso[task.setvariable variable=monitorStatus]$STATUS"
+
+  - task: PublishTestResults@2
+    displayName: 'Publish JUnit Results'
+    condition: always()
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: '**/test-results.xml'
+      searchFolder: $(System.DefaultWorkingDirectory)
+      testRunTitle: 'API-Watch Monitor Results'
+
+  - task: Bash@3
+    displayName: 'Check Status'
+    condition: eq(variables['monitorStatus'], 'failing')
+    inputs:
+      targetType: inline
+      script: |
+        echo "##vso[task.logissue type=error]API Monitor is FAILING"
+        exit 1

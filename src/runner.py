@@ -29,10 +29,12 @@ class RequestConfig:
     url: str
     headers: Dict[str, str] = field(default_factory=dict)
     params: Dict[str, Any] = field(default_factory=dict)
-    body: Optional[Dict[str, Any]] = None
+    body: Optional[Any] = None  # str, dict, or bytes
+    body_type: str = "json"  # json | form-urlencoded | form-data | raw | xml | graphql | none
     timeout: int = 10  # seconds
     verify_ssl: bool = True
     allow_redirects: bool = True
+    use_cookies: bool = True  # auto cookie-jar management
 
 
 @dataclass
@@ -77,6 +79,8 @@ class APIRunner:
         self.retry_handler = RetryHandler(retry_config) if retry_config else RetryHandler()
         self.logger = logger or logging.getLogger(__name__)
         self.session = requests.Session()
+        # Persistent async client for connection pooling (lazy-initialised)
+        self._async_client: Optional["httpx.AsyncClient"] = None
     
     def execute(self, config: RequestConfig) -> RequestResult:
         """
@@ -149,11 +153,21 @@ class APIRunner:
             
             result.request_headers = headers.copy()
             
+            # Inject cookies from cookie jar
+            if config.use_cookies:
+                from .cookie_jar import get_cookie_store
+                cookie_header = get_cookie_store().get_cookie_header(config.url)
+                if cookie_header:
+                    headers.setdefault("Cookie", cookie_header)
+
             # Prepare auth tuple for Basic auth
             auth = None
             if self.auth_handler and self.auth_handler.get_auth_type() == "basic":
                 auth = self.auth_handler.get_basic_auth_tuple()
             
+            # Build body kwargs based on body_type
+            body_kwargs = self._build_body_kwargs(config)
+
             # Execute request
             start_time = time.time()
             
@@ -162,11 +176,11 @@ class APIRunner:
                 url=config.url,
                 headers=headers,
                 params=config.params,
-                json=config.body if config.body else None,
                 timeout=config.timeout,
                 verify=config.verify_ssl,
                 allow_redirects=config.allow_redirects,
-                auth=auth
+                auth=auth,
+                **body_kwargs,
             )
             
             end_time = time.time()
@@ -185,7 +199,12 @@ class APIRunner:
             
             # Check if request was successful
             result.success = response.ok  # True for status codes 200-299
-            
+
+            # Capture Set-Cookie headers
+            if config.use_cookies:
+                from .cookie_jar import get_cookie_store
+                get_cookie_store().capture_from_headers(config.url, dict(response.headers))
+
             if not result.success:
                 result.error = f"HTTP {response.status_code}"
                 result.error_type = "HTTP_ERROR"
@@ -295,6 +314,13 @@ class APIRunner:
 
             result.request_headers = headers.copy()
 
+            # Inject cookies from cookie jar
+            if config.use_cookies:
+                from .cookie_jar import get_cookie_store
+                cookie_header = get_cookie_store().get_cookie_header(config.url)
+                if cookie_header:
+                    headers.setdefault("Cookie", cookie_header)
+
             # Prepare auth for basic auth
             auth = None
             if self.auth_handler and self.auth_handler.get_auth_type() == "basic":
@@ -302,21 +328,22 @@ class APIRunner:
                 if creds:
                     auth = httpx.BasicAuth(creds[0], creds[1])
 
+            # Build body kwargs based on body_type
+            body_kwargs = self._build_body_kwargs_httpx(config)
+
             start_time = time.time()
 
-            async with httpx.AsyncClient(
+            client = self._get_async_client()
+            response = await client.request(
+                method=config.method.upper(),
+                url=config.url,
+                headers=headers,
+                params=config.params,
+                auth=auth,
                 timeout=config.timeout,
-                verify=config.verify_ssl,
                 follow_redirects=config.allow_redirects,
-            ) as client:
-                response = await client.request(
-                    method=config.method.upper(),
-                    url=config.url,
-                    headers=headers,
-                    params=config.params,
-                    json=config.body if config.body else None,
-                    auth=auth,
-                )
+                **body_kwargs,
+            )
 
             end_time = time.time()
 
@@ -334,6 +361,11 @@ class APIRunner:
             if not result.success:
                 result.error = f"HTTP {response.status_code}"
                 result.error_type = "HTTP_ERROR"
+
+            # Capture Set-Cookie headers
+            if config.use_cookies:
+                from .cookie_jar import get_cookie_store
+                get_cookie_store().capture_from_headers(config.url, dict(response.headers))
 
         except httpx.TimeoutException as e:
             result.error = "Request timeout"
@@ -356,6 +388,79 @@ class APIRunner:
             self.logger.error(f"Unexpected error: {str(e)}")
 
         return result
+
+    # ── Body builders ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def _build_body_kwargs(config: RequestConfig) -> Dict[str, Any]:
+        """Build kwargs for requests.Session.request based on body_type."""
+        if config.body is None:
+            return {}
+        bt = (config.body_type or "json").lower()
+        if bt == "json":
+            import json as _json
+            if isinstance(config.body, str):
+                try:
+                    return {"json": _json.loads(config.body)}
+                except (ValueError, TypeError):
+                    return {"data": config.body}
+            return {"json": config.body}
+        if bt in ("form-urlencoded", "urlencoded"):
+            if isinstance(config.body, dict):
+                return {"data": config.body}
+            return {"data": config.body}
+        if bt in ("form-data", "multipart"):
+            if isinstance(config.body, dict):
+                return {"files": [(k, (None, v)) for k, v in config.body.items()]}
+            return {"data": config.body}
+        # raw, xml, graphql, text, html → send as data with explicit content-type
+        return {"data": config.body if isinstance(config.body, (str, bytes)) else str(config.body)}
+
+    @staticmethod
+    def _build_body_kwargs_httpx(config: RequestConfig) -> Dict[str, Any]:
+        """Build kwargs for httpx.AsyncClient.request based on body_type."""
+        if config.body is None:
+            return {}
+        bt = (config.body_type or "json").lower()
+        if bt == "json":
+            import json as _json
+            if isinstance(config.body, str):
+                try:
+                    return {"json": _json.loads(config.body)}
+                except (ValueError, TypeError):
+                    return {"content": config.body}
+            return {"json": config.body}
+        if bt in ("form-urlencoded", "urlencoded"):
+            if isinstance(config.body, dict):
+                return {"data": config.body}
+            return {"content": config.body}
+        if bt in ("form-data", "multipart"):
+            if isinstance(config.body, dict):
+                return {"files": [(k, (None, v)) for k, v in config.body.items()]}
+            return {"content": config.body}
+        return {"content": config.body if isinstance(config.body, (str, bytes)) else str(config.body)}
+
+    # ── Connection pool management ─────────────────────────────────────
+
+    def _get_async_client(self) -> "httpx.AsyncClient":
+        """Lazily create a persistent httpx.AsyncClient with connection pooling."""
+        if self._async_client is None or self._async_client.is_closed:
+            pool_limits = httpx.Limits(
+                max_connections=100,
+                max_keepalive_connections=20,
+                keepalive_expiry=30,
+            )
+            self._async_client = httpx.AsyncClient(
+                limits=pool_limits,
+                http2=False,  # Stick to HTTP/1.1 for broad compatibility
+            )
+        return self._async_client
+
+    async def close_async(self) -> None:
+        """Close the persistent async client and its connection pool."""
+        if self._async_client and not self._async_client.is_closed:
+            await self._async_client.aclose()
+            self._async_client = None
 
     def close(self) -> None:
         """Close the sync session."""

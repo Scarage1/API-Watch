@@ -11,7 +11,7 @@ export const apiClient = axios.create({
   },
 });
 
-// Request interceptor — attach JWT from auth store
+// Request interceptor — attach JWT and workspace ID from stores
 apiClient.interceptors.request.use(
   (config) => {
     // Read token from persisted auth store in localStorage
@@ -27,6 +27,21 @@ apiClient.interceptors.request.use(
     } catch {
       // Ignore parse errors
     }
+
+    // Inject active workspace ID
+    try {
+      const wsStored = localStorage.getItem('api-watch-workspace');
+      if (wsStored) {
+        const parsed = JSON.parse(wsStored);
+        const wsId = parsed?.state?.activeWorkspaceId;
+        if (wsId) {
+          config.headers['X-Workspace-Id'] = wsId;
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

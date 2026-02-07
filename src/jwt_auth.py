@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 import bcrypt
@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import get_db
-from .models import User
+from .models import User, ApiKey
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +178,11 @@ async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """FastAPI dependency — extracts and verifies user from JWT Bearer token."""
+    """FastAPI dependency — extracts and verifies user from JWT Bearer token
+    or X-API-Key header."""
+    from fastapi import Request
+    # We can't easily inject Request here alongside Depends, so API key
+    # auth is handled via a separate dependency; this remains JWT-only.
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -230,3 +234,65 @@ async def get_optional_user(
         return await get_current_user(credentials, db)
     except HTTPException:
         return None
+
+
+async def get_current_user_or_apikey(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: AsyncSession = Depends(get_db),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+) -> User:
+    """Accept either JWT Bearer or X-API-Key header for authentication.
+
+    This is used as a drop-in replacement dependency where API key access
+    is needed (e.g. CI/CD endpoints). Routes that only need JWT should
+    continue using ``get_current_user``.
+    """
+    # Try JWT first
+    if credentials is not None:
+        return await get_current_user(credentials, db)
+
+    # Fall back to X-API-Key
+    if x_api_key:
+        return await _resolve_api_key(x_api_key, db)
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required (Bearer token or X-API-Key)",
+    )
+
+
+async def _resolve_api_key(raw_key: str, db: AsyncSession) -> User:
+    """Validate a raw API key string and return the owning User."""
+    prefix = raw_key[:8]
+
+    result = await db.execute(
+        select(ApiKey).where(ApiKey.key_prefix == prefix, ApiKey.is_active == True)
+    )
+    candidates = result.scalars().all()
+
+    for api_key in candidates:
+        if verify_password(raw_key, api_key.key_hash):
+            # Check expiry
+            if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="API key has expired",
+                )
+            # Update last_used_at
+            api_key.last_used_at = datetime.now(timezone.utc)
+            await db.commit()
+
+            # Load owner
+            user_result = await db.execute(select(User).where(User.id == api_key.owner_id))
+            user = user_result.scalar_one_or_none()
+            if not user or not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="API key owner not found or inactive",
+                )
+            return user
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid API key",
+    )
