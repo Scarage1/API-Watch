@@ -28,7 +28,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run backend tests (137 tests)
+      - name: Run backend tests
         run: |
           pip install pytest pytest-asyncio httpx
           python -m pytest tests/ -v --tb=short
@@ -44,7 +44,7 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Run frontend tests (41 tests)
+      - name: Run frontend tests
         working-directory: frontend
         run: npm run test
 
@@ -63,7 +63,13 @@ jobs:
         run: |
           mkdir deploy-package
           cp -r src requirements.txt runtime.txt startup.sh examples deploy-package/
+          # Include alembic for database migrations
+          if [ -d alembic ]; then
+            cp -r alembic alembic.ini deploy-package/ 2>/dev/null || true
+          fi
           cp -r frontend/dist deploy-package/public
+          # Install Python deps into the package so startup.sh doesn't need pip install
+          pip install -r requirements.txt --target deploy-package/.python_packages/lib/site-packages
           cd deploy-package
           zip -r ../backend-deploy.zip .
 
@@ -79,9 +85,17 @@ jobs:
       - name: Test deployment
         run: |
           echo "Waiting for deployment to stabilize..."
-          sleep 15
-          curl -f https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/health || exit 1
-          echo "✅ Backend is healthy!"
+          sleep 30
+          for i in 1 2 3; do
+            if curl -sf https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/health; then
+              echo "✅ Backend is healthy!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "❌ Health check failed after 3 attempts"
+          exit 1
 
       - name: Logout from Azure
         run: az logout
