@@ -24,7 +24,6 @@ aiosqlite>=0.19.0
 sqlalchemy[asyncio]>=2.0.25
 alembic>=1.13.1
 asyncpg>=0.29.0
-psycopg2-binary>=2.9.9
 
 # Cache — Redis (prod, optional for dev)
 redis>=5.0.0

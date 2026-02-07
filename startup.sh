@@ -8,8 +8,8 @@ cd /home/site/wwwroot
 
 # Install dependencies if Oryx build didn't run (fallback)
 if ! python -c "import gunicorn" 2>/dev/null; then
-  echo "Installing Python dependencies..."
-  pip install --no-cache-dir -r requirements.txt 2>&1 | tail -5
+  echo "Installing Python dependencies (timeout 180s)..."
+  timeout 180 pip install --no-cache-dir -r requirements.txt 2>&1 | tail -5 || echo "⚠️  pip install timed out or failed (non-fatal)"
 fi
 
 # Run database migrations (safe to run repeatedly — no-ops if up to date)

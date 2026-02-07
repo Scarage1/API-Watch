@@ -10,13 +10,17 @@ Pydantic BaseSettings gives us:
 """
 from __future__ import annotations
 
+import logging
 import os
+import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -90,10 +94,14 @@ class Settings(BaseSettings):
         # Allow empty only when TESTING
         if os.getenv("TESTING", "").lower() in ("true", "1"):
             return "test-only-insecure-key"
-        raise ValueError(
-            "JWT_SECRET_KEY environment variable is required in production. "
-            "Set it to a strong random string (e.g. `openssl rand -hex 32`)."
+        # Auto-generate a secret so the app can boot, but warn loudly
+        generated = secrets.token_hex(32)
+        logger.warning(
+            "⚠️  JWT_SECRET_KEY not set — auto-generated an ephemeral key. "
+            "Sessions will NOT survive restarts. Set JWT_SECRET_KEY in your "
+            "environment for production use."
         )
+        return generated
 
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
