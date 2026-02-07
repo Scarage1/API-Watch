@@ -17,13 +17,13 @@ const baseReq: CodeGenRequest = {
 };
 
 describe('CODE_LANGUAGES', () => {
-  it('has 4 languages', () => {
-    expect(CODE_LANGUAGES).toHaveLength(4);
+  it('has 8 languages', () => {
+    expect(CODE_LANGUAGES).toHaveLength(8);
   });
 
-  it('contains curl, python, javascript, nodejs', () => {
+  it('contains all supported languages', () => {
     const ids = CODE_LANGUAGES.map((l) => l.id);
-    expect(ids).toEqual(['curl', 'python', 'javascript', 'nodejs']);
+    expect(ids).toEqual(['curl', 'python', 'javascript', 'nodejs', 'go', 'php', 'java', 'csharp']);
   });
 });
 

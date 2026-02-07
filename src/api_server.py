@@ -31,6 +31,7 @@ from src.database import init_db, close_db, get_db
 from src.models import RequestHistory
 from src.jwt_auth import get_optional_user
 from src.routes import api_v1_router
+from src.rate_limit import RateLimitMiddleware, RateLimitConfig
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -68,6 +69,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate Limiting
+rate_limit_config = RateLimitConfig(
+    default_limit=int(os.getenv("RATE_LIMIT_DEFAULT", "60")),
+    auth_limit=int(os.getenv("RATE_LIMIT_AUTH", "10")),
+    window_seconds=int(os.getenv("RATE_LIMIT_WINDOW", "60")),
+    enabled=os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+        and os.getenv("TESTING", "").lower() != "true",
+)
+app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
 
 # Include v1 API routes
 app.include_router(api_v1_router)

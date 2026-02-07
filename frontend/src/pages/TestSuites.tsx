@@ -16,9 +16,13 @@ import {
   Timer,
   Repeat,
   Layers,
+  FileSpreadsheet,
+  Link2,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useEnvironmentStore } from '../store/useEnvironmentStore';
+import { parseDataFile } from '../lib/dataFile';
+import type { DataFileResult } from '../lib/dataFile';
 import apiClient from '../lib/api';
 import { cn } from '../lib/utils';
 import type { TestSuite, RequestResult } from '../types';
@@ -48,7 +52,11 @@ export default function TestSuites() {
   const [iterations, setIterations] = useState<Record<string, number>>({});
   const [delay, setDelay] = useState<Record<string, number>>({});
   const [envOverride, setEnvOverride] = useState<Record<string, string>>({});
+  const [dataFiles, setDataFiles] = useState<Record<string, DataFileResult>>({});
+  const [chainVars, setChainVars] = useState<Record<string, boolean>>({});
   const abortRef = useRef<Record<string, boolean>>({});
+  const dataFileRef = useRef<HTMLInputElement>(null);
+  const [dataFileTarget, setDataFileTarget] = useState<string | null>(null);
 
   const getIterations = (name: string) => iterations[name] || 1;
   const getDelay = (name: string) => delay[name] || 0;
@@ -60,7 +68,11 @@ export default function TestSuites() {
 
   const runSuite = async (suite: TestSuite) => {
     setError(null);
-    const iters = getIterations(suite.name);
+    const dataFile = dataFiles[suite.name];
+    const useChaining = chainVars[suite.name] ?? false;
+
+    // If data file loaded, override iterations with data rows
+    const iters = dataFile && dataFile.rows.length > 0 ? dataFile.rows.length : getIterations(suite.name);
     const delayMs = getDelay(suite.name);
     const totalTests = suite.tests.length * iters;
     abortRef.current[suite.name] = false;
@@ -82,12 +94,12 @@ export default function TestSuites() {
 
     // Resolve environment variables
     const envId = envOverride[suite.name];
-    let vars: Record<string, string> = {};
+    let baseVars: Record<string, string> = {};
     if (envId && envId !== '__none__') {
       const env = environments.find((e) => e.id === envId);
-      if (env) vars = env.variables;
+      if (env) baseVars = { ...env.variables };
     } else if (activeEnv) {
-      vars = activeEnv.variables;
+      baseVars = { ...activeEnv.variables };
     }
 
     const allResults: RequestResult[] = [];
@@ -97,43 +109,84 @@ export default function TestSuites() {
       for (let iter = 0; iter < iters; iter++) {
         if (abortRef.current[suite.name]) break;
 
-        const payload = {
-          name: suite.name,
-          description: suite.description || '',
-          base_url: interpolate(suite.base_url, vars),
-          defaults: suite.defaults || { timeout_seconds: settings.defaultTimeout, retries: settings.maxRetries },
-          auth: suite.auth || {},
-          tests: suite.tests.map((t) => ({
-            id: t.id,
-            method: t.method,
-            path: interpolate(t.path, vars),
-            description: t.description || '',
-            headers: Object.fromEntries(
-              Object.entries(t.headers || {}).map(([k, v]) => [k, interpolate(String(v), vars)])
-            ),
-            params: Object.fromEntries(
-              Object.entries(t.params || {}).map(([k, v]) => [k, interpolate(String(v), vars)])
-            ),
-            body: t.body ? interpolate(typeof t.body === 'string' ? t.body : JSON.stringify(t.body), vars) : null,
-            timeout_seconds: t.timeout_seconds || settings.defaultTimeout,
-          })),
-        };
+        // Merge data row variables for this iteration
+        const dataRow = dataFile?.rows[iter] || {};
+        const vars = { ...baseVars, ...dataRow };
 
-        const response = await apiClient.post('/api/execute-suite', payload);
-        const results: RequestResult[] = response.data;
-        allResults.push(...results);
-        completed += results.length;
+        // Request chaining: accumulate variables extracted from responses
+        const chainedVars: Record<string, string> = {};
 
-        setSuiteRuns((prev) => ({
-          ...prev,
-          [suite.name]: {
-            ...prev[suite.name],
-            results: [...allResults],
-            progress: Math.round((completed / totalTests) * 100),
-            currentIteration: iter + 1,
-            currentTest: completed,
-          },
-        }));
+        // Execute tests sequentially for chaining support
+        for (let testIdx = 0; testIdx < suite.tests.length; testIdx++) {
+          if (abortRef.current[suite.name]) break;
+
+          const t = suite.tests[testIdx];
+          const mergedVars = { ...vars, ...chainedVars };
+
+          const payload = {
+            name: suite.name,
+            description: suite.description || '',
+            base_url: interpolate(suite.base_url, mergedVars),
+            defaults: suite.defaults || { timeout_seconds: settings.defaultTimeout, retries: settings.maxRetries },
+            auth: suite.auth || {},
+            tests: [{
+              id: t.id,
+              method: t.method,
+              path: interpolate(t.path, mergedVars),
+              description: t.description || '',
+              headers: Object.fromEntries(
+                Object.entries(t.headers || {}).map(([k, v]) => [k, interpolate(String(v), mergedVars)])
+              ),
+              params: Object.fromEntries(
+                Object.entries(t.params || {}).map(([k, v]) => [k, interpolate(String(v), mergedVars)])
+              ),
+              body: t.body ? interpolate(typeof t.body === 'string' ? t.body : JSON.stringify(t.body), mergedVars) : null,
+              timeout_seconds: t.timeout_seconds || settings.defaultTimeout,
+            }],
+          };
+
+          const response = await apiClient.post('/api/execute-suite', payload);
+          const results: RequestResult[] = response.data;
+          allResults.push(...results);
+          completed += results.length;
+
+          // Request chaining: extract variables from response body
+          if (useChaining && results.length > 0) {
+            const result = results[0];
+            if (result.response_body) {
+              try {
+                const json = JSON.parse(result.response_body);
+                // Auto-extract common patterns
+                if (typeof json === 'object' && json !== null && !Array.isArray(json)) {
+                  for (const [key, val] of Object.entries(json)) {
+                    if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+                      chainedVars[`${t.id}.${key}`] = String(val);
+                      // Also store common keys with simple names
+                      if (['id', 'token', 'access_token', 'refresh_token', 'key', 'slug', 'uuid'].includes(key)) {
+                        chainedVars[key] = String(val);
+                      }
+                    }
+                  }
+                }
+              } catch { /* response is not JSON, skip extraction */ }
+            }
+            // Also store status code
+            if (result.status_code) {
+              chainedVars[`${t.id}.status`] = String(result.status_code);
+            }
+          }
+
+          setSuiteRuns((prev) => ({
+            ...prev,
+            [suite.name]: {
+              ...prev[suite.name],
+              results: [...allResults],
+              progress: Math.round((completed / totalTests) * 100),
+              currentIteration: iter + 1,
+              currentTest: completed,
+            },
+          }));
+        }
 
         // Delay between iterations
         if (delayMs > 0 && iter < iters - 1 && !abortRef.current[suite.name]) {
@@ -323,6 +376,69 @@ export default function TestSuites() {
                           </select>
                         </div>
                       </div>
+
+                      {/* Request Chaining */}
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={chainVars[suite.name] ?? false}
+                            onChange={(e) => setChainVars({ ...chainVars, [suite.name]: e.target.checked })}
+                            className="w-3.5 h-3.5 rounded border-surface-300 text-brand-600 focus:ring-brand-500"
+                          />
+                          <span className="text-[10px] font-medium text-surface-500 flex items-center gap-1">
+                            <Link2 className="w-3 h-3" /> Request Chaining
+                          </span>
+                        </label>
+                        <span className="text-[9px] text-surface-400">
+                          Pass response values between sequential requests via {'{{id}}'}, {'{{token}}'}, etc.
+                        </span>
+                      </div>
+
+                      {/* Data-Driven Testing */}
+                      <div>
+                        <label className="text-[10px] font-medium text-surface-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                          <FileSpreadsheet className="w-3 h-3" /> Data File (CSV / JSON)
+                        </label>
+                        {dataFiles[suite.name] ? (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 p-2 bg-surface-100 dark:bg-surface-800 rounded-lg">
+                              <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                ✓ {dataFiles[suite.name].rows.length} rows × {dataFiles[suite.name].columns.length} columns loaded
+                              </p>
+                              <p className="text-[9px] text-surface-400 mt-0.5">
+                                Columns: {dataFiles[suite.name].columns.slice(0, 5).join(', ')}{dataFiles[suite.name].columns.length > 5 ? '...' : ''}
+                              </p>
+                              {dataFiles[suite.name].errors.length > 0 && (
+                                <p className="text-[9px] text-amber-500 mt-0.5">
+                                  {dataFiles[suite.name].errors[0]}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => {
+                                const next = { ...dataFiles };
+                                delete next[suite.name];
+                                setDataFiles(next);
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10 text-surface-400 hover:text-red-500"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setDataFileTarget(suite.name);
+                              dataFileRef.current?.click();
+                            }}
+                            className="btn-secondary !py-1.5 !px-3 !text-xs w-full"
+                          >
+                            <Upload className="w-3 h-3" />
+                            Load Data File
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -447,6 +563,31 @@ export default function TestSuites() {
           </button>
         </div>
       )}
+
+      {/* Hidden data file input */}
+      <input
+        ref={dataFileRef}
+        type="file"
+        accept=".csv,.json,.tsv"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file || !dataFileTarget) return;
+          try {
+            const text = await file.text();
+            const result = parseDataFile(text, file.name);
+            if (result.rows.length > 0) {
+              setDataFiles((prev) => ({ ...prev, [dataFileTarget]: result }));
+            } else {
+              setError(`Data file has no rows: ${result.errors.join(', ')}`);
+            }
+          } catch {
+            setError('Failed to parse data file');
+          }
+          if (dataFileRef.current) dataFileRef.current.value = '';
+          setDataFileTarget(null);
+        }}
+      />
 
       {/* Create Suite Modal */}
       {showCreateModal && (

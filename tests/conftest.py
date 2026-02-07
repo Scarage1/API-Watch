@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Use in-memory SQLite for tests
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite://"
+# Disable rate limiting during tests
+os.environ["TESTING"] = "true"
 
 import pytest
 import pytest_asyncio

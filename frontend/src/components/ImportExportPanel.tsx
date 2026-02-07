@@ -9,13 +9,17 @@ import {
   FolderDown,
   FolderUp,
   Layers,
+  Terminal,
+  FileCode,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAppStore } from '../store/useAppStore';
 import { useEnvironmentStore } from '../store/useEnvironmentStore';
+import { parseCurl, isCurlCommand } from '../lib/curlParser';
+import { parseOpenApiSpec, isOpenApiSpec } from '../lib/openApiParser';
 import type { TestSuite } from '../types';
 
-type ImportType = 'collection' | 'environment' | 'postman';
+type ImportType = 'collection' | 'environment' | 'postman' | 'curl' | 'openapi';
 
 interface ImportExportPanelProps {
   onClose: () => void;
@@ -121,6 +125,8 @@ export default function ImportExportPanel({ onClose }: ImportExportPanelProps) {
   const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
   const [importType, setImportType] = useState<ImportType>('collection');
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [curlText, setCurlText] = useState('');
+  const [openApiWarnings, setOpenApiWarnings] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* ──────── Export ──────── */
@@ -188,9 +194,11 @@ export default function ImportExportPanel({ onClose }: ImportExportPanelProps) {
 
       if (importType === 'postman') {
         importPostman(data);
+      } else if (importType === 'openapi') {
+        importOpenApi(data);
       } else if (importType === 'collection') {
         importCollection(data);
-      } else {
+      } else if (importType === 'environment') {
         importEnvironment(data);
       }
     } catch {
@@ -300,6 +308,75 @@ export default function ImportExportPanel({ onClose }: ImportExportPanelProps) {
     }
   };
 
+  const importCurl = () => {
+    try {
+      if (!curlText.trim()) {
+        setResult({ success: false, message: 'Please paste a cURL command' });
+        return;
+      }
+      if (!isCurlCommand(curlText)) {
+        setResult({ success: false, message: 'Input does not look like a cURL command' });
+        return;
+      }
+      const parsed = parseCurl(curlText);
+      const suite: TestSuite = {
+        name: `cURL Import - ${new Date().toLocaleTimeString()}`,
+        description: `Imported from cURL: ${parsed.method} ${parsed.url}`,
+        base_url: (() => {
+          try {
+            const u = new URL(parsed.url);
+            return u.origin;
+          } catch {
+            return parsed.url;
+          }
+        })(),
+        tests: [{
+          id: 'curl-1',
+          method: parsed.method,
+          path: (() => {
+            try {
+              const u = new URL(parsed.url);
+              return u.pathname;
+            } catch {
+              return parsed.url;
+            }
+          })(),
+          description: `${parsed.method} request`,
+          headers: Object.keys(parsed.headers).length > 0 ? parsed.headers : undefined,
+          params: Object.keys(parsed.params).length > 0 ? parsed.params : undefined,
+          body: parsed.body || undefined,
+        }],
+      };
+      addTestSuite(suite);
+      setCurlText('');
+      setResult({ success: true, message: `Imported cURL command as "${suite.name}"` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to parse cURL command';
+      setResult({ success: false, message: msg });
+    }
+  };
+
+  const importOpenApi = (data: unknown) => {
+    try {
+      if (!isOpenApiSpec(data)) {
+        setResult({ success: false, message: 'Not a valid OpenAPI / Swagger spec' });
+        return;
+      }
+      const result = parseOpenApiSpec(data);
+      addTestSuite(result.suite);
+      setOpenApiWarnings(result.warnings);
+      setResult({
+        success: true,
+        message: `Imported "${result.suite.name}" — ${result.endpointCount} endpoints from OpenAPI ${result.version}${
+          result.warnings.length > 0 ? ` (${result.warnings.length} warning${result.warnings.length > 1 ? 's' : ''})` : ''
+        }`,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to parse OpenAPI spec';
+      setResult({ success: false, message: msg });
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -382,59 +459,103 @@ export default function ImportExportPanel({ onClose }: ImportExportPanelProps) {
           ) : (
             <>
               <p className="text-xs text-surface-500">
-                Import collections, environments, or Postman v2.1 exports.
+                Import from cURL, OpenAPI/Swagger, Postman, or API-Watch format.
               </p>
               <div>
                 <label className="text-[10px] font-medium text-surface-400 uppercase tracking-wide mb-2 block">
                   Import Type
                 </label>
-                <div className="flex gap-1">
+                <div className="flex gap-1 flex-wrap">
                   {[
-                    { id: 'collection' as ImportType, label: 'Collection' },
-                    { id: 'environment' as ImportType, label: 'Environment' },
-                    { id: 'postman' as ImportType, label: 'Postman v2.1' },
+                    { id: 'curl' as ImportType, label: 'cURL', icon: Terminal },
+                    { id: 'openapi' as ImportType, label: 'OpenAPI', icon: FileCode },
+                    { id: 'postman' as ImportType, label: 'Postman', icon: FileJson },
+                    { id: 'collection' as ImportType, label: 'Collection', icon: FolderUp },
+                    { id: 'environment' as ImportType, label: 'Environment', icon: Layers },
                   ].map((t) => (
                     <button
                       key={t.id}
-                      onClick={() => { setImportType(t.id); setResult(null); }}
+                      onClick={() => { setImportType(t.id); setResult(null); setOpenApiWarnings([]); }}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-colors',
+                        'px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-colors flex items-center gap-1',
                         importType === t.id
                           ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400'
                           : 'bg-surface-100 dark:bg-surface-800 text-surface-500 hover:bg-surface-200 dark:hover:bg-surface-700'
                       )}
                     >
+                      <t.icon className="w-3 h-3" />
                       {t.label}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <button
-                onClick={handleFileSelect}
-                className="w-full flex flex-col items-center justify-center gap-2 p-8 rounded-xl border-2 border-dashed border-surface-200 dark:border-surface-700 hover:border-brand-400 dark:hover:border-brand-600 transition-colors cursor-pointer"
-              >
-                <FolderUp className="w-6 h-6 text-surface-400" />
-                <span className="text-xs font-medium text-surface-600 dark:text-surface-300">
-                  Click to select a JSON file
-                </span>
-                <span className="text-[10px] text-surface-400">
-                  {importType === 'postman'
-                    ? 'Postman v2.1 collection export'
-                    : importType === 'environment'
-                      ? 'API-Watch environment JSON'
-                      : 'API-Watch collection or full backup JSON'
-                  }
-                </span>
-              </button>
+              {importType === 'curl' ? (
+                <div className="space-y-3">
+                  <textarea
+                    value={curlText}
+                    onChange={(e) => { setCurlText(e.target.value); setResult(null); }}
+                    placeholder={`curl -X POST https://api.example.com/data \\
+  -H 'Content-Type: application/json' \\
+  -d '{"key": "value"}'`}
+                    className="input font-mono text-xs !rounded-xl"
+                    rows={8}
+                  />
+                  <button
+                    onClick={importCurl}
+                    disabled={!curlText.trim()}
+                    className="btn-primary w-full"
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                    Import cURL
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={handleFileSelect}
+                    className="w-full flex flex-col items-center justify-center gap-2 p-8 rounded-xl border-2 border-dashed border-surface-200 dark:border-surface-700 hover:border-brand-400 dark:hover:border-brand-600 transition-colors cursor-pointer"
+                  >
+                    <FolderUp className="w-6 h-6 text-surface-400" />
+                    <span className="text-xs font-medium text-surface-600 dark:text-surface-300">
+                      Click to select a {importType === 'openapi' ? 'JSON' : 'JSON'} file
+                    </span>
+                    <span className="text-[10px] text-surface-400">
+                      {importType === 'openapi'
+                        ? 'OpenAPI 3.x or Swagger 2.x JSON spec'
+                        : importType === 'postman'
+                          ? 'Postman v2.1 collection export'
+                          : importType === 'environment'
+                            ? 'API-Watch environment JSON'
+                            : 'API-Watch collection or full backup JSON'
+                      }
+                    </span>
+                  </button>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                onChange={handleFileChange}
-                className="hidden"
-              />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </>
+              )}
+
+              {/* OpenAPI warnings */}
+              {openApiWarnings.length > 0 && (
+                <div className="space-y-1">
+                  {openApiWarnings.slice(0, 5).map((w, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      {w}
+                    </div>
+                  ))}
+                  {openApiWarnings.length > 5 && (
+                    <span className="text-[10px] text-surface-400">+{openApiWarnings.length - 5} more warnings</span>
+                  )}
+                </div>
+              )}
             </>
           )}
 
