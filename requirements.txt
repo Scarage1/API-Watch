@@ -1,41 +1,41 @@
 # Core dependencies
-requests>=2.31.0
-httpx>=0.27.0
-pyyaml>=6.0.1
-python-dotenv>=1.0.0
+requests==2.32.5
+httpx==0.28.1
+pyyaml==6.0.3
+python-dotenv==1.2.1
 
 # Beautiful terminal output
-rich>=13.7.0
+rich==14.3.2
 
 # HTML report generation
-jinja2>=3.1.2
+jinja2==3.1.6
 
 # Web framework
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-gunicorn>=21.2.0
+fastapi==0.128.2
+uvicorn[standard]==0.39.0
+gunicorn==23.0.0
 
 # Pydantic for data validation
-pydantic>=2.0.0
-pydantic-settings>=2.1.0
+pydantic==2.12.5
+pydantic-settings==2.11.0
 
 # Database — SQLite (dev) + PostgreSQL (prod)
-aiosqlite>=0.19.0
-sqlalchemy[asyncio]>=2.0.25
-alembic>=1.13.1
-asyncpg>=0.29.0
+aiosqlite==0.22.1
+sqlalchemy[asyncio]==2.0.46
+alembic==1.16.5
+asyncpg==0.31.0
 
 # Cache — Redis (prod, optional for dev)
-redis>=5.0.0
+redis==7.0.1
 
 # Scheduling
-croniter>=1.4.0
+croniter==6.0.0
 
 # Authentication
-python-jose[cryptography]>=3.3.0
-bcrypt>=4.0.0
-python-multipart>=0.0.6
+python-jose[cryptography]==3.5.0
+bcrypt==5.0.0
+python-multipart==0.0.20
 
 # Development and testing
-pytest>=7.4.3
-pytest-asyncio>=0.23.3
+pytest==8.4.2
+pytest-asyncio==1.2.0

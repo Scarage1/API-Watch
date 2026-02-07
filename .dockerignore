@@ -1,0 +1,57 @@
+# Git
+.git
+.gitignore
+
+# Dependencies (rebuilt in Docker)
+node_modules
+frontend/node_modules
+venv
+.venv
+env
+
+# Build artifacts
+frontend/dist
+__pycache__
+*.py[cod]
+*.pyo
+*.egg-info
+.eggs
+build
+
+# Data & logs (use volumes instead)
+data/
+logs/
+*.db
+
+# Environment files (secrets — never bake into image)
+.env
+.env.*
+!.env.production.example
+
+# IDE / OS
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing artifacts
+.pytest_cache
+.coverage
+htmlcov
+.vitest
+
+# Documentation (not needed in runtime image)
+*.md
+LICENSE
+SCALING_PLAN.md
+docs/
+
+# Deployment configs (not needed in image)
+render.yaml
+startup.sh
+.github/
+
+# Docker files (prevent recursive context)
+docker-compose*.yml

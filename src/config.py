@@ -81,12 +81,8 @@ class Settings(BaseSettings):
     def _default_database_url(cls, v: str) -> str:
         if v:
             return v
-        # Default to SQLite — use /home/site/wwwroot/data on Azure,
-        # otherwise ./data relative to project root
-        if os.path.isdir("/home/site/wwwroot"):
-            db_dir = Path("/home/site/wwwroot/data")
-        else:
-            db_dir = Path("data")
+        # Default to SQLite in ./data (works in Docker WORKDIR /app and local dev)
+        db_dir = Path("data")
         try:
             db_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
