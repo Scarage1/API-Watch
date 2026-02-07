@@ -13,6 +13,9 @@ import {
   FileText,
   Users,
   Activity,
+  Radar,
+  Key,
+  FileUp,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
@@ -26,11 +29,14 @@ const navItems = [
   { to: '/websocket', icon: Plug, label: 'WebSocket', section: 'main' },
   { to: '/graphql', icon: Braces, label: 'GraphQL', section: 'main' },
   { to: '/mocks', icon: Server, label: 'Mock Server', section: 'tools' },
+  { to: '/monitors', icon: Radar, label: 'Monitors', section: 'tools' },
+  { to: '/import-export', icon: FileUp, label: 'Import/Export', section: 'tools' },
   { to: '/docs', icon: FileText, label: 'Documentation', section: 'tools' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics', section: 'insights' },
   { to: '/history', icon: Clock, label: 'History', section: 'insights' },
   { to: '/activity', icon: Activity, label: 'Activity', section: 'insights' },
   { to: '/teams', icon: Users, label: 'Teams', section: 'system' },
+  { to: '/api-keys', icon: Key, label: 'API Keys', section: 'system' },
   { to: '/settings', icon: Settings, label: 'Settings', section: 'system' },
 ];
 

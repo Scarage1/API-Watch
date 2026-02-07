@@ -69,6 +69,20 @@ class ActivityAction(str, enum.Enum):
     JOINED = "joined"
 
 
+class MonitorStatus(str, enum.Enum):
+    """Monitor run result status."""
+    PASSING = "passing"
+    FAILING = "failing"
+    ERROR = "error"
+
+
+class ChannelType(str, enum.Enum):
+    """Notification channel type."""
+    EMAIL = "email"
+    WEBHOOK = "webhook"
+    SLACK = "slack"
+
+
 # ── User ──────────────────────────────────────────────────────────────────────
 
 class User(Base):
@@ -444,4 +458,159 @@ class ActivityLog(Base):
     __table_args__ = (
         Index("ix_activity_workspace_time", "workspace_id", "created_at"),
         Index("ix_activity_user", "user_id"),
+    )
+
+
+# ── Monitor ───────────────────────────────────────────────────────────────────
+
+class Monitor(Base):
+    """Scheduled API monitor — runs a collection on a cron schedule and checks assertions."""
+    __tablename__ = "monitors"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    collection_id: Mapped[str] = mapped_column(String(36), ForeignKey("collections.id"), nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    workspace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=True)
+
+    # Schedule
+    cron_expression: Mapped[str] = mapped_column(String(100), nullable=False, default="*/5 * * * *")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Assertions (JSON list of assertion objects)
+    # Each: { "type": "status_code"|"response_time"|"body_contains"|"header_exists",
+    #          "target": "<value>", "operator": "eq"|"lt"|"gt"|"contains", "value": "..." }
+    assertions: Mapped[Optional[list]] = mapped_column(JSON, default=list)
+
+    # Alert config
+    alert_after_failures: Mapped[int] = mapped_column(Integer, default=1)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Status tracking
+    last_status: Mapped[Optional[MonitorStatus]] = mapped_column(SAEnum(MonitorStatus), nullable=True)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    # Relationships
+    collection: Mapped["Collection"] = relationship()
+    owner: Mapped["User"] = relationship()
+    workspace: Mapped[Optional["Workspace"]] = relationship()
+    runs: Mapped[List["MonitorRun"]] = relationship(back_populates="monitor", cascade="all, delete-orphan")
+    notification_links: Mapped[List["MonitorNotification"]] = relationship(back_populates="monitor", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_monitors_workspace", "workspace_id"),
+        Index("ix_monitors_owner", "owner_id"),
+        Index("ix_monitors_next_run", "enabled", "next_run_at"),
+    )
+
+
+class MonitorRun(Base):
+    """Result of a single monitor execution."""
+    __tablename__ = "monitor_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    monitor_id: Mapped[str] = mapped_column(String(36), ForeignKey("monitors.id"), nullable=False)
+    status: Mapped[MonitorStatus] = mapped_column(SAEnum(MonitorStatus), nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Results
+    total_requests: Mapped[int] = mapped_column(Integer, default=0)
+    passed_requests: Mapped[int] = mapped_column(Integer, default=0)
+    failed_requests: Mapped[int] = mapped_column(Integer, default=0)
+    assertions_passed: Mapped[int] = mapped_column(Integer, default=0)
+    assertions_failed: Mapped[int] = mapped_column(Integer, default=0)
+    results: Mapped[Optional[list]] = mapped_column(JSON, default=list)  # per-request results
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    monitor: Mapped["Monitor"] = relationship(back_populates="runs")
+
+    __table_args__ = (
+        Index("ix_monitor_runs_monitor_time", "monitor_id", "started_at"),
+    )
+
+
+# ── Notification Channel ─────────────────────────────────────────────────────
+
+class NotificationChannel(Base):
+    """A notification delivery channel (email, webhook, Slack)."""
+    __tablename__ = "notification_channels"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    channel_type: Mapped[ChannelType] = mapped_column(SAEnum(ChannelType), nullable=False)
+    # Config varies by type:
+    #   email:   { "recipients": ["a@b.com"] }
+    #   webhook: { "url": "https://...", "method": "POST", "headers": {} }
+    #   slack:   { "webhook_url": "https://hooks.slack.com/..." }
+    config: Mapped[dict] = mapped_column(JSON, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    workspace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    # Relationships
+    owner: Mapped["User"] = relationship()
+    workspace: Mapped[Optional["Workspace"]] = relationship()
+    monitor_links: Mapped[List["MonitorNotification"]] = relationship(back_populates="channel", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_notification_channels_workspace", "workspace_id"),
+        Index("ix_notification_channels_owner", "owner_id"),
+    )
+
+
+class MonitorNotification(Base):
+    """Link table: which monitors send alerts to which channels."""
+    __tablename__ = "monitor_notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    monitor_id: Mapped[str] = mapped_column(String(36), ForeignKey("monitors.id"), nullable=False)
+    channel_id: Mapped[str] = mapped_column(String(36), ForeignKey("notification_channels.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    # Relationships
+    monitor: Mapped["Monitor"] = relationship(back_populates="notification_links")
+    channel: Mapped["NotificationChannel"] = relationship(back_populates="monitor_links")
+
+    __table_args__ = (
+        UniqueConstraint("monitor_id", "channel_id", name="uq_monitor_channel"),
+    )
+
+
+# ── Phase 5 models ───────────────────────────────────────────────────────────
+
+class ApiKey(Base):
+    """API key for programmatic / CI/CD access (alternative to JWT)."""
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)   # first 8 chars, shown in UI
+    key_hash: Mapped[str] = mapped_column(String(128), nullable=False)   # bcrypt hash of full key
+    scopes: Mapped[Optional[list]] = mapped_column(JSON, default=lambda: ["read", "write"])
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    workspace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    # Relationships
+    owner: Mapped["User"] = relationship()
+    workspace: Mapped[Optional["Workspace"]] = relationship()
+
+    __table_args__ = (
+        Index("ix_api_keys_owner", "owner_id"),
+        Index("ix_api_keys_workspace", "workspace_id"),
+        Index("ix_api_keys_prefix", "key_prefix"),
     )

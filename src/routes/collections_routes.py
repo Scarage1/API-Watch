@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from ..database import get_db
 from ..models import User, Collection, SavedRequest, ActivityLog, ActivityAction
-from ..jwt_auth import get_current_user
+from ..jwt_auth import get_current_user_or_apikey as get_current_user
 from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/collections", tags=["Collections"])

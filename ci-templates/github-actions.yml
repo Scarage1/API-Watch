@@ -1,0 +1,73 @@
+# API-Watch CI/CD Integration — GitHub Actions
+#
+# This workflow runs your API-Watch monitors as part of CI,
+# exporting results as JUnit XML for pipeline integration.
+#
+# Prerequisites:
+# 1. Set APIWATCH_BASE_URL secret (your API-Watch server URL)
+# 2. Set APIWATCH_API_KEY secret (generate from Settings → API Keys)
+# 3. (Optional) Set APIWATCH_MONITOR_ID to target a specific monitor
+
+name: API-Watch Monitor Run
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # Every 6 hours
+  workflow_dispatch:          # Manual trigger
+  push:
+    branches: [main]
+
+jobs:
+  api-monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Monitor Run
+        id: trigger
+        run: |
+          RESPONSE=$(curl -s -X POST \
+            "${{ secrets.APIWATCH_BASE_URL }}/api/v1/monitors/${{ secrets.APIWATCH_MONITOR_ID }}/trigger" \
+            -H "X-API-Key: ${{ secrets.APIWATCH_API_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Response: $RESPONSE"
+          echo "monitor_id=${{ secrets.APIWATCH_MONITOR_ID }}" >> $GITHUB_OUTPUT
+
+      - name: Wait for Run Completion
+        run: sleep 30  # Allow time for monitor execution
+
+      - name: Fetch Latest Run
+        id: fetch
+        run: |
+          RUNS=$(curl -s \
+            "${{ secrets.APIWATCH_BASE_URL }}/api/v1/monitors/${{ secrets.APIWATCH_MONITOR_ID }}/runs?limit=1" \
+            -H "X-API-Key: ${{ secrets.APIWATCH_API_KEY }}")
+          RUN_ID=$(echo "$RUNS" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          STATUS=$(echo "$RUNS" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['status'])")
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+      - name: Export JUnit Report
+        run: |
+          curl -s \
+            "${{ secrets.APIWATCH_BASE_URL }}/api/v1/import-export/export/junit/${{ secrets.APIWATCH_MONITOR_ID }}/runs/${{ steps.fetch.outputs.run_id }}" \
+            -H "X-API-Key: ${{ secrets.APIWATCH_API_KEY }}" \
+            -o test-results.xml
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-watch-results
+          path: test-results.xml
+
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v4
+        if: always()
+        with:
+          report_paths: test-results.xml
+          check_name: API Monitor Results
+
+      - name: Check Status
+        if: steps.fetch.outputs.status == 'failing'
+        run: |
+          echo "::error::API Monitor is FAILING"
+          exit 1

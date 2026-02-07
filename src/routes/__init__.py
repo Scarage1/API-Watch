@@ -11,6 +11,10 @@ from .invitation_routes import router as invitation_router
 from .sharing_routes import router as sharing_router
 from .versioning_routes import router as versioning_router
 from .activity_routes import router as activity_router
+from .monitor_routes import router as monitor_router
+from .notification_routes import router as notification_router
+from .apikey_routes import router as apikey_router
+from .import_export_routes import router as import_export_router
 
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(auth_router)
@@ -26,3 +30,7 @@ api_v1_router.include_router(org_router)
 api_v1_router.include_router(workspace_router)
 api_v1_router.include_router(invitation_router)
 api_v1_router.include_router(activity_router)
+api_v1_router.include_router(monitor_router)
+api_v1_router.include_router(notification_router)
+api_v1_router.include_router(apikey_router)
+api_v1_router.include_router(import_export_router)

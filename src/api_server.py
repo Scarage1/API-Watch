@@ -34,6 +34,7 @@ from src.routes import api_v1_router, mock_catch_router
 from src.rate_limit import RateLimitMiddleware, RateLimitConfig
 from src.cache import get_cache, close_cache
 from src.storage import get_storage, close_storage
+from src.scheduler import start_scheduler, stop_scheduler
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -57,9 +58,20 @@ async def lifespan(app: FastAPI):
     storage = get_storage()
     logger.info("Cache & storage initialized.")
 
+    # Start the background monitor scheduler
+    import asyncio
+    scheduler_task = asyncio.create_task(start_scheduler())
+    logger.info("Monitor scheduler started.")
+
     yield
 
     logger.info("Shutting down...")
+    await stop_scheduler()
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
     await close_cache()
     await close_storage()
     await close_db()
