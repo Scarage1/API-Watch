@@ -61,6 +61,7 @@ frontend/dist/
 .env
 .env.local
 .env.*.local
+.env.production
 
 # OS
 .DS_Store
@@ -77,3 +78,4 @@ htmlcov/
 
 # Planning docs (local only — never push)
 SCALING_PLAN.md
+PRODUCTION_PLAN.md
