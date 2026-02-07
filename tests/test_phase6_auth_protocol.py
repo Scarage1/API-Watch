@@ -143,10 +143,10 @@ class TestOAuthRoutes:
         assert data["code_challenge"] == expected_challenge
 
     @pytest.mark.asyncio
-    async def test_pkce_requires_auth(self, client: AsyncClient):
-        """PKCE endpoint should reject unauthenticated requests."""
+    async def test_pkce_accessible_without_auth(self, client: AsyncClient):
+        """In open-source mode, PKCE endpoint is accessible without auth."""
         res = await client.post("/api/v1/oauth/pkce")
-        assert res.status_code in (401, 403)
+        assert res.status_code not in (401, 403)
 
     @pytest.mark.asyncio
     async def test_authorize_url_endpoint(self, client: AsyncClient):

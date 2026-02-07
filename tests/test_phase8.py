@@ -143,7 +143,7 @@ async def test_mock_path_normalisation(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_mock_requires_auth_for_crud(client: AsyncClient):
-    """Test that CRUD operations require authentication."""
+async def test_mock_accessible_without_auth(client: AsyncClient):
+    """In open-source mode, mock CRUD endpoints are accessible without auth."""
     res = await client.get("/api/v1/mock/endpoints")
-    assert res.status_code in (401, 403)
+    assert res.status_code == 200

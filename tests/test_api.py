@@ -118,8 +118,9 @@ class TestAuthProfile:
 
     @pytest.mark.asyncio
     async def test_profile_no_token(self, client: AsyncClient):
+        """In open-source mode, /auth/me returns the default user without auth."""
         res = await client.get("/api/v1/auth/me")
-        assert res.status_code == 401
+        assert res.status_code == 200
 
 
 # ───────────── Collections ─────────────
@@ -173,9 +174,10 @@ class TestCollections:
         assert res.status_code == 204
 
     @pytest.mark.asyncio
-    async def test_collections_require_auth(self, client: AsyncClient):
+    async def test_collections_accessible_without_auth(self, client: AsyncClient):
+        """In open-source mode, collections are accessible without auth."""
         res = await client.get("/api/v1/collections")
-        assert res.status_code == 401
+        assert res.status_code == 200
 
 
 # ───────────── Saved Requests ─────────────
@@ -320,13 +322,13 @@ class TestExecuteRequest:
         assert response.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_execute_request_requires_auth(self, client: AsyncClient):
-        """SEC-03: Unauthenticated requests must be rejected."""
+    async def test_execute_request_accessible_without_auth(self, client: AsyncClient):
+        """In open-source mode, execute-request is accessible without auth."""
         response = await client.post(
             "/api/execute-request",
             json={"method": "GET", "url": "https://httpbin.org/get"},
         )
-        assert response.status_code == 401
+        assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_ssrf_blocked_localhost(self, auth_client):
@@ -382,8 +384,8 @@ class TestExecuteSuite:
         assert data[0]["success"] is True
 
     @pytest.mark.asyncio
-    async def test_execute_suite_requires_auth(self, client: AsyncClient):
-        """SEC-04: Unauthenticated suite execution must be rejected."""
+    async def test_execute_suite_accessible_without_auth(self, client: AsyncClient):
+        """In open-source mode, execute-suite is accessible without auth."""
         response = await client.post(
             "/api/execute-suite",
             json={
@@ -392,7 +394,7 @@ class TestExecuteSuite:
                 "tests": [{"id": "t1", "method": "GET", "path": "/get"}],
             },
         )
-        assert response.status_code == 401
+        assert response.status_code == 200
 
 
 class TestDiagnoseEndpoint:

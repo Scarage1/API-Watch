@@ -225,9 +225,10 @@ class TestApiKeyAuth:
         assert res.status_code in (401, 403), f"Should reject revoked key: {res.text}"
 
     @pytest.mark.asyncio
-    async def test_no_auth_at_all(self, client: AsyncClient):
+    async def test_no_auth_returns_open_access(self, client: AsyncClient):
+        """In open-source mode, endpoints are accessible without auth."""
         res = await client.get("/api/v1/collections")
-        assert res.status_code in (401, 403), f"Should require auth: {res.text}"
+        assert res.status_code == 200
 
     @pytest.mark.asyncio
     async def test_api_key_updates_last_used(self, client: AsyncClient):
@@ -626,24 +627,27 @@ class TestEdgeCases:
 
     @pytest.mark.asyncio
     async def test_import_without_auth(self, client: AsyncClient):
+        """In open-source mode, import is accessible without auth (may return 400 for bad data)."""
         res = await client.post(
             "/api/v1/import-export/import/postman",
             files={"file": ("test.json", BytesIO(b"{}"), "application/json")},
         )
-        assert res.status_code in (401, 403)
+        assert res.status_code not in (401, 403)
 
     @pytest.mark.asyncio
     async def test_export_without_auth(self, client: AsyncClient):
+        """In open-source mode, export is accessible without auth (may return 404 for missing collection)."""
         res = await client.get("/api/v1/import-export/export/postman/some-id")
-        assert res.status_code in (401, 403)
+        assert res.status_code not in (401, 403)
 
     @pytest.mark.asyncio
     async def test_api_key_crud_without_auth(self, client: AsyncClient):
+        """In open-source mode, API key CRUD is accessible without auth."""
         res = await client.post("/api/v1/api-keys", json={"name": "Nope"})
-        assert res.status_code in (401, 403)
+        assert res.status_code not in (401, 403)
 
         res2 = await client.get("/api/v1/api-keys")
-        assert res2.status_code in (401, 403)
+        assert res2.status_code not in (401, 403)
 
     @pytest.mark.asyncio
     async def test_create_api_key_missing_name(self, client: AsyncClient):

@@ -44,17 +44,17 @@ class TestCORSConfiguration:
 
 class TestLegacyEndpointAuth:
     @pytest.mark.asyncio
-    async def test_execute_request_401_without_auth(self, client: AsyncClient):
-        """SEC-03: /api/execute-request must require authentication."""
+    async def test_execute_request_accessible_without_auth(self, client: AsyncClient):
+        """Open-source mode: /api/execute-request is accessible without auth."""
         res = await client.post(
             "/api/execute-request",
             json={"method": "GET", "url": "https://httpbin.org/get"},
         )
-        assert res.status_code == 401
+        assert res.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_execute_suite_401_without_auth(self, client: AsyncClient):
-        """SEC-04: /api/execute-suite must require authentication."""
+    async def test_execute_suite_accessible_without_auth(self, client: AsyncClient):
+        """Open-source mode: /api/execute-suite is accessible without auth."""
         res = await client.post(
             "/api/execute-suite",
             json={
@@ -63,7 +63,7 @@ class TestLegacyEndpointAuth:
                 "tests": [{"id": "t1", "method": "GET", "path": "/get"}],
             },
         )
-        assert res.status_code == 401
+        assert res.status_code == 200
 
 
 # ───────────── SEC-06: Password Validation ─────────────

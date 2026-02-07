@@ -469,53 +469,9 @@ async def get_stats(results: List[RequestResult]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- Static files / SPA ---
-
-frontend_dist = None
-for path in [
-    Path(__file__).parent.parent / "public",
-    Path(__file__).parent.parent / "frontend" / "dist",
-]:
-    if path.exists():
-        frontend_dist = path
-        break
-
-if frontend_dist:
-    assets_path = frontend_dist / "assets"
-    if assets_path.exists():
-        app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
-
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        """Serve React SPA for all non-API routes."""
-        # Return 404 for unmatched API / webhook routes instead of serving SPA
-        if full_path.startswith("api/") or full_path.startswith("webhook"):
-            raise HTTPException(status_code=404, detail="Not found")
-
-        if "." in full_path.split("/")[-1]:
-            file_path = (frontend_dist / full_path).resolve()
-            # Prevent path traversal — file must be inside frontend_dist
-            if file_path.is_relative_to(frontend_dist.resolve()) and file_path.exists():
-                return FileResponse(file_path)
-            raise HTTPException(status_code=404, detail="Not found")
-
-        return FileResponse(frontend_dist / "index.html")
-else:
-    @app.get("/")
-    async def root():
-        """Root endpoint with service info."""
-        return {
-            "service": "API-Watch Server",
-            "status": "running",
-            "version": "2.0.0",
-            "endpoints": {
-                "legacy": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats"],
-                "v1": ["/api/v1/auth/*", "/api/v1/collections/*", "/api/v1/environments/*", "/api/v1/history/*"],
-            },
-        }
-
-
 # --- Webhook ---
+# NOTE: Webhook routes MUST be registered before the SPA catch-all
+# so that GET /webhook/... isn't swallowed by /{full_path:path}.
 
 @app.api_route("/webhook/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 @app.api_route("/webhook", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
@@ -560,6 +516,52 @@ async def webhook_catch_all(request: Request):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
+
+
+# --- Static files / SPA ---
+
+frontend_dist = None
+for path in [
+    Path(__file__).parent.parent / "public",
+    Path(__file__).parent.parent / "frontend" / "dist",
+]:
+    if path.exists():
+        frontend_dist = path
+        break
+
+if frontend_dist:
+    assets_path = frontend_dist / "assets"
+    if assets_path.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve React SPA for all non-API routes."""
+        # Return 404 for unmatched API / webhook routes instead of serving SPA
+        if full_path.startswith("api/") or full_path.startswith("webhook"):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        if "." in full_path.split("/")[-1]:
+            file_path = (frontend_dist / full_path).resolve()
+            # Prevent path traversal — file must be inside frontend_dist
+            if file_path.is_relative_to(frontend_dist.resolve()) and file_path.exists():
+                return FileResponse(file_path)
+            raise HTTPException(status_code=404, detail="Not found")
+
+        return FileResponse(frontend_dist / "index.html")
+else:
+    @app.get("/")
+    async def root():
+        """Root endpoint with service info."""
+        return {
+            "service": "API-Watch Server",
+            "status": "running",
+            "version": "2.0.0",
+            "endpoints": {
+                "legacy": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats"],
+                "v1": ["/api/v1/auth/*", "/api/v1/collections/*", "/api/v1/environments/*", "/api/v1/history/*"],
+            },
+        }
 
 
 if __name__ == "__main__":
