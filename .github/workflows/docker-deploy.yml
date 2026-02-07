@@ -22,7 +22,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: scarage1/api-watch
   AZURE_WEBAPP_NAME: apiwatch-shivamkumar
   AZURE_RESOURCE_GROUP: apiwatch-rg
 
@@ -125,12 +125,14 @@ jobs:
 
       - name: Configure Azure App Service for Container
         run: |
-          # Set container image
+          # Set container image with GHCR credentials (private registry)
           az webapp config container set \
             --name ${{ env.AZURE_WEBAPP_NAME }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --docker-custom-image-name ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            --docker-registry-server-url https://${{ env.REGISTRY }}
+            --container-image-name ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            --container-registry-url https://${{ env.REGISTRY }} \
+            --container-registry-user ${{ github.actor }} \
+            --container-registry-password ${{ secrets.GITHUB_TOKEN }}
 
           # Set application settings
           az webapp config appsettings set \
@@ -170,10 +172,10 @@ jobs:
 
           echo "❌ Health check failed after 6 attempts"
           # Dump container logs for debugging
-          az webapp log tail \
+          timeout 15 az webapp log tail \
             --name ${{ env.AZURE_WEBAPP_NAME }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --timeout 10 2>&1 | tail -50 || true
+            2>&1 | tail -50 || true
           exit 1
 
       - name: Azure Logout
