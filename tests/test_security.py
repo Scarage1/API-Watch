@@ -17,9 +17,10 @@ from httpx import AsyncClient
 class TestJWTSecretEnforcement:
     def test_secret_key_is_not_hardcoded_default(self):
         """SEC-01: Verify the hardcoded fallback 'api-watch-dev-secret-change-in-production' is gone."""
-        from src.jwt_auth import SECRET_KEY
-        assert SECRET_KEY != "api-watch-dev-secret-change-in-production"
-        assert len(SECRET_KEY) > 10  # must be non-trivial
+        from src.config import get_settings
+        settings = get_settings()
+        assert settings.jwt_secret_key != "api-watch-dev-secret-change-in-production"
+        assert len(settings.jwt_secret_key) > 10  # must be non-trivial
 
 
 # ───────────── SEC-02: CORS Configuration ─────────────
@@ -27,14 +28,16 @@ class TestJWTSecretEnforcement:
 class TestCORSConfiguration:
     def test_cors_not_wildcard(self):
         """SEC-02: CORS should not use wildcard origins."""
-        from src.api_server import CORS_ORIGINS
-        assert "*" not in CORS_ORIGINS
+        from src.config import get_settings
+        origins = get_settings().cors_origins_list
+        assert "*" not in origins
 
     def test_cors_reads_from_env(self):
         """SEC-02: CORS origins should be configurable via environment."""
-        from src.api_server import CORS_ORIGINS
-        assert isinstance(CORS_ORIGINS, list)
-        assert len(CORS_ORIGINS) > 0
+        from src.config import get_settings
+        origins = get_settings().cors_origins_list
+        assert isinstance(origins, list)
+        assert len(origins) > 0
 
 
 # ───────────── SEC-03/04: Auth Required on Legacy Endpoints ─────────────
@@ -337,3 +340,158 @@ class TestWebhookSanitisation:
         res = await client.post("/webhook/test", json={"event": "ping"})
         assert res.status_code == 200
         assert res.json()["status"] == "received"
+
+
+# ════════════════════════════════════════════════════════════════════
+# Phase 1B — Infrastructure Foundation Tests
+# ════════════════════════════════════════════════════════════════════
+
+
+# ───────────── Config Module ─────────────
+
+class TestConfigModule:
+    def test_settings_is_singleton(self):
+        """get_settings() should return the same cached instance."""
+        from src.config import get_settings
+        s1 = get_settings()
+        s2 = get_settings()
+        assert s1 is s2
+
+    def test_settings_has_required_fields(self):
+        from src.config import get_settings
+        s = get_settings()
+        assert s.app_name == "API-Watch"
+        assert s.jwt_secret_key  # must be non-empty
+        assert s.database_url  # must be non-empty
+        assert s.cors_origins_list  # must have at least one origin
+
+    def test_settings_is_sqlite_in_test(self):
+        from src.config import get_settings
+        s = get_settings()
+        assert s.is_sqlite
+        assert not s.is_postgres
+
+
+# ───────────── Cache Module ─────────────
+
+class TestCacheModule:
+    @pytest.mark.asyncio
+    async def test_in_memory_set_get(self):
+        from src.cache import get_cache
+        cache = get_cache()
+        await cache.set("testkey", "testval", ttl=60)
+        val = await cache.get("testkey")
+        assert val == "testval"
+
+    @pytest.mark.asyncio
+    async def test_in_memory_delete(self):
+        from src.cache import get_cache
+        cache = get_cache()
+        await cache.set("delkey", "val")
+        await cache.delete("delkey")
+        assert await cache.get("delkey") is None
+
+    @pytest.mark.asyncio
+    async def test_in_memory_incr(self):
+        from src.cache import get_cache
+        cache = get_cache()
+        v1 = await cache.incr("counter")
+        v2 = await cache.incr("counter")
+        assert v1 == 1
+        assert v2 == 2
+
+    @pytest.mark.asyncio
+    async def test_in_memory_ping(self):
+        from src.cache import get_cache
+        assert await get_cache().ping() is True
+
+
+# ───────────── Token Blacklist / Logout ─────────────
+
+class TestTokenBlacklist:
+    @pytest.mark.asyncio
+    async def test_logout_revokes_token(self, auth_client):
+        """POST /api/v1/auth/logout should blacklist the token."""
+        client, token, _ = auth_client
+        # Logout
+        res = await client.post("/api/v1/auth/logout")
+        assert res.status_code == 200
+        assert "logged out" in res.json()["detail"].lower()
+
+        # Token should now be rejected
+        res2 = await client.get("/api/v1/auth/me")
+        assert res2.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_logout_without_token_returns_401(self, client: AsyncClient):
+        """Logout without a Bearer token should fail."""
+        res = await client.post("/api/v1/auth/logout")
+        assert res.status_code in (401, 403)
+
+
+# ───────────── Storage Module ─────────────
+
+class TestStorageModule:
+    @pytest.mark.asyncio
+    async def test_filesystem_write_read(self):
+        from src.storage import get_storage
+        storage = get_storage()
+        await storage.write("test/hello.txt", "world")
+        content = await storage.read("test/hello.txt")
+        assert content == "world"
+
+    @pytest.mark.asyncio
+    async def test_filesystem_delete(self):
+        from src.storage import get_storage
+        storage = get_storage()
+        await storage.write("test/del.txt", "data")
+        assert await storage.exists("test/del.txt")
+        await storage.delete("test/del.txt")
+        assert not await storage.exists("test/del.txt")
+
+    @pytest.mark.asyncio
+    async def test_filesystem_list(self):
+        from src.storage import get_storage
+        storage = get_storage()
+        await storage.write("listtest/a.txt", "a")
+        await storage.write("listtest/b.txt", "b")
+        files = await storage.list_files("listtest")
+        assert len(files) >= 2
+
+
+# ───────────── Enhanced Health Check ─────────────
+
+class TestEnhancedHealthCheck:
+    @pytest.mark.asyncio
+    async def test_health_returns_checks(self, client: AsyncClient):
+        """Health endpoint should include DB + cache status."""
+        res = await client.get("/health")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] in ("healthy", "degraded")
+        assert "checks" in data
+        assert data["checks"]["database"] == "ok"
+        assert data["checks"]["cache"] in ("ok", "unavailable")
+
+
+# ───────────── Database Module ─────────────
+
+class TestDatabaseModule:
+    @pytest.mark.asyncio
+    async def test_db_health_check(self):
+        from src.database import check_db_health
+        assert await check_db_health() is True
+
+
+# ───────────── Alembic ─────────────
+
+class TestAlembicSetup:
+    def test_alembic_ini_exists(self):
+        assert Path("alembic.ini").exists()
+
+    def test_alembic_env_exists(self):
+        assert Path("alembic/env.py").exists()
+
+    def test_initial_migration_exists(self):
+        versions = list(Path("alembic/versions").glob("*.py"))
+        assert len(versions) >= 1, "No migration files found"

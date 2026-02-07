@@ -22,33 +22,46 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
+from src.config import get_settings
 from src.auth import AuthHandler, create_auth_from_config
 from src.retry import RetryConfig
 from src.runner import APIRunner, RequestConfig, RequestResult
 from src.diagnose import DiagnosisEngine
-from src.database import init_db, close_db, get_db
+from src.database import init_db, close_db, get_db, check_db_health
 from src.models import RequestHistory
 from src.jwt_auth import get_current_user
 from src.routes import api_v1_router, mock_catch_router
 from src.rate_limit import RateLimitMiddleware, RateLimitConfig
+from src.cache import get_cache, close_cache
+from src.storage import get_storage, close_storage
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Ensure webhook logs directory exists
-Path("logs/webhooks").mkdir(parents=True, exist_ok=True)
 
 
 # --- Lifespan ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
+    settings = get_settings()
+    logger.info("Starting %s v%s", settings.app_name, settings.app_version)
+
+    # Initialize database
     logger.info("Initializing database...")
     await init_db()
     logger.info("Database ready.")
+
+    # Warm up cache & storage (lazy singletons)
+    cache = get_cache()
+    storage = get_storage()
+    logger.info("Cache & storage initialized.")
+
     yield
+
     logger.info("Shutting down...")
+    await close_cache()
+    await close_storage()
     await close_db()
 
 
@@ -60,13 +73,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS Configuration — env-configurable origin whitelist (no more wildcard)
-_cors_origins_raw = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000")
-CORS_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+# CORS Configuration — driven by Settings
+_settings = get_settings()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=_settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -74,16 +86,16 @@ app.add_middleware(
 
 # Rate Limiting
 rate_limit_config = RateLimitConfig(
-    default_limit=int(os.getenv("RATE_LIMIT_DEFAULT", "60")),
-    auth_limit=int(os.getenv("RATE_LIMIT_AUTH", "10")),
-    window_seconds=int(os.getenv("RATE_LIMIT_WINDOW", "60")),
-    enabled=os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
-        and os.getenv("TESTING", "").lower() != "true",
+    default_limit=_settings.rate_limit_default,
+    auth_limit=_settings.rate_limit_auth,
+    window_seconds=_settings.rate_limit_window,
+    enabled=_settings.rate_limit_enabled and not _settings.testing,
+    use_redis=bool(_settings.redis_url),
 )
 app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
 
-# --- Request body size limit (10 MB default) ---
-MAX_BODY_SIZE = int(os.getenv("MAX_REQUEST_BODY_SIZE", str(10 * 1024 * 1024)))  # 10 MB
+# --- Request body size limit ---
+MAX_BODY_SIZE = _settings.max_request_body_size
 
 
 @app.middleware("http")
@@ -236,8 +248,23 @@ def interpolate_body(body: Any, variables: Dict[str, str]) -> Any:
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "api-watch-server", "version": "2.0.0"}
+    """Health check endpoint with DB + cache connectivity."""
+    settings = get_settings()
+    db_ok = await check_db_health()
+
+    cache = get_cache()
+    cache_ok = await cache.ping()
+
+    healthy = db_ok  # DB is required; cache is optional
+    return {
+        "status": "healthy" if healthy else "degraded",
+        "service": settings.app_name,
+        "version": settings.app_version,
+        "checks": {
+            "database": "ok" if db_ok else "error",
+            "cache": "ok" if cache_ok else "unavailable",
+        },
+    }
 
 
 @app.post("/api/execute-request")
@@ -473,16 +500,10 @@ async def webhook_catch_all(request: Request):
         except Exception:
             body = None
 
-    # Sanitize timestamp for safe filename (SEC-12)
+    # Sanitize timestamp for safe filename
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     safe_timestamp = re.sub(r'[^a-zA-Z0-9_]', '', timestamp)
-    log_file = Path("logs/webhooks") / f"webhook_{safe_timestamp}.json"
-    # Verify the resolved path is within logs/webhooks (prevent path traversal)
-    resolved = log_file.resolve()
-    expected_parent = Path("logs/webhooks").resolve()
-    if not str(resolved).startswith(str(expected_parent)):
-        logger.error(f"Path traversal attempt in webhook log: {log_file}")
-        raise HTTPException(status_code=400, detail="Invalid webhook path")
+    log_path = f"webhooks/webhook_{safe_timestamp}.json"
 
     log_data = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -491,8 +512,9 @@ async def webhook_catch_all(request: Request):
         "headers": headers,
         "body": body,
     }
-    with open(resolved, "w") as f:
-        json.dump(log_data, f, indent=2, default=str)
+
+    storage = get_storage()
+    await storage.write(log_path, json.dumps(log_data, indent=2, default=str))
 
     logger.info(f"Webhook received: {method} {request.url.path}")
 
@@ -501,7 +523,7 @@ async def webhook_catch_all(request: Request):
         content={
             "status": "received",
             "message": "Webhook received and logged successfully",
-            "log_file": str(resolved),
+            "log_path": log_path,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -510,6 +532,6 @@ async def webhook_catch_all(request: Request):
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("PORT", 8000))
-    logger.info(f"Starting API server on port {port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    s = get_settings()
+    logger.info(f"Starting API server on {s.host}:{s.port}")
+    uvicorn.run(app, host=s.host, port=s.port)
