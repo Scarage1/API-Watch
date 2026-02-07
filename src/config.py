@@ -81,9 +81,18 @@ class Settings(BaseSettings):
     def _default_database_url(cls, v: str) -> str:
         if v:
             return v
-        # Default to SQLite in ./data directory
-        db_dir = Path("data")
-        db_dir.mkdir(parents=True, exist_ok=True)
+        # Default to SQLite — use /home/site/wwwroot/data on Azure,
+        # otherwise ./data relative to project root
+        if os.path.isdir("/home/site/wwwroot"):
+            db_dir = Path("/home/site/wwwroot/data")
+        else:
+            db_dir = Path("data")
+        try:
+            db_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.warning("Cannot create DB directory %s: %s — using /tmp", db_dir, e)
+            db_dir = Path("/tmp/apiwatch-data")
+            db_dir.mkdir(parents=True, exist_ok=True)
         return f"sqlite+aiosqlite:///{db_dir.resolve()}/apiwatch.db"
 
     @field_validator("jwt_secret_key", mode="before")
