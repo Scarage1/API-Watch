@@ -82,16 +82,12 @@ jobs:
           zip -r ../backend-deploy.zip .
 
       - name: Deploy to Azure Web App
-        run: |
-          az webapp deploy \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --src-path backend-deploy.zip \
-            --type zip \
-            --clean true \
-            --restart true \
-            --async false \
-            --timeout 600
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: backend-deploy.zip
+          clean: true
+          startup-command: startup.sh
 
       - name: Test deployment
         run: |
