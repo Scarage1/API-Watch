@@ -108,7 +108,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            VITE_API_URL=https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net
+            VITE_API_URL=
 
   # ── Job 3: Deploy to Azure ──────────────────────────────────
   deploy:
