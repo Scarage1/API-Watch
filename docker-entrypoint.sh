@@ -7,8 +7,9 @@ echo "Python: $(python --version)"
 echo "Working dir: $(pwd)"
 
 # ── Run database migrations ─────────────────────────────────
-if [ -d "alembic" ]; then
-    echo "Running database migrations..."
+if [ -n "$DATABASE_URL" ] && [ -d "alembic" ]; then
+    # Only run Alembic for PostgreSQL (production DB with persistent state)
+    echo "Running database migrations (PostgreSQL)..."
     python -m alembic upgrade head 2>&1 || {
         echo "⚠ Migrations failed — attempting table creation fallback..."
         python -c "
@@ -19,6 +20,8 @@ print('Tables created via init_db()')
 " 2>&1 || echo "⚠ Table creation also failed — app may still work if DB is already set up"
     }
     echo "Migrations complete."
+else
+    echo "No DATABASE_URL set — using SQLite. Tables will be created by app lifespan."
 fi
 
 # ── Create writable directories ──────────────────────────────
