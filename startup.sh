@@ -6,7 +6,13 @@ set -e
 # Ensure we're in the deployment directory
 cd /home/site/wwwroot
 
-# Install dependencies if Oryx build didn't run (fallback)
+# Add bundled packages to Python path (pre-installed during CI)
+if [ -d "packages" ]; then
+  export PYTHONPATH="/home/site/wwwroot/packages:$PYTHONPATH"
+  echo "Using pre-bundled Python packages"
+fi
+
+# Fallback: install if bundled packages are missing
 if ! python -c "import gunicorn" 2>/dev/null; then
   echo "Installing Python dependencies (timeout 180s)..."
   timeout 180 pip install --no-cache-dir -r requirements.txt 2>&1 | tail -5 || echo "⚠️  pip install timed out or failed (non-fatal)"

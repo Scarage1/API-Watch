@@ -65,14 +65,21 @@ jobs:
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ env.AZURE_WEBAPP_NAME }} \
             --settings \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               WEBSITE_STARTUP_TIME_LIMIT=600 \
               JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}"
+
+      - name: Install production dependencies for deployment
+        run: |
+          pip install --target=./deploy-deps -r requirements.txt
+          echo "Installed $(ls deploy-deps | wc -l) packages"
 
       - name: Create deployment package
         run: |
           mkdir deploy-package
           cp -r src requirements.txt runtime.txt startup.sh examples deploy-package/
+          # Include pre-installed Python packages (CI is Linux x64 = same as Azure)
+          cp -r deploy-deps deploy-package/packages
           # Include alembic for database migrations
           if [ -d alembic ]; then
             cp -r alembic alembic.ini deploy-package/ 2>/dev/null || true
@@ -83,12 +90,11 @@ jobs:
 
       - name: Deploy to Azure Web App
         run: |
-          az webapp deploy \
+          az webapp deployment source config-zip \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --src-path backend-deploy.zip \
-            --type zip \
-            --async false
+            --src backend-deploy.zip \
+            --timeout 300
 
       - name: Test deployment
         run: |
