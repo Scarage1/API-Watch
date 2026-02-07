@@ -59,6 +59,15 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Configure Azure App Settings
+        run: |
+          az webapp config appsettings set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --settings \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+              WEBSITE_STARTUP_TIME_LIMIT=600
+
       - name: Create deployment package
         run: |
           mkdir deploy-package
@@ -68,8 +77,6 @@ jobs:
             cp -r alembic alembic.ini deploy-package/ 2>/dev/null || true
           fi
           cp -r frontend/dist deploy-package/public
-          # Install Python deps into the package so startup.sh doesn't need pip install
-          pip install -r requirements.txt --target deploy-package/.python_packages/lib/site-packages
           cd deploy-package
           zip -r ../backend-deploy.zip .
 
