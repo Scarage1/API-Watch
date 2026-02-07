@@ -35,6 +35,7 @@ from src.rate_limit import RateLimitMiddleware, RateLimitConfig
 from src.cache import get_cache, close_cache
 from src.storage import get_storage, close_storage
 from src.scheduler import start_scheduler, stop_scheduler
+from src.telemetry import telemetry_middleware, reset_telemetry
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -105,6 +106,9 @@ rate_limit_config = RateLimitConfig(
     use_redis=bool(_settings.redis_url),
 )
 app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
+
+# --- Telemetry middleware ---
+app.middleware("http")(telemetry_middleware)
 
 # --- Request body size limit ---
 MAX_BODY_SIZE = _settings.max_request_body_size

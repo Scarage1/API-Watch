@@ -83,6 +83,15 @@ class ChannelType(str, enum.Enum):
     SLACK = "slack"
 
 
+class AuditCategory(str, enum.Enum):
+    """Audit log event category."""
+    AUTH = "auth"
+    SECURITY = "security"
+    ADMIN = "admin"
+    DATA = "data"
+    SYSTEM = "system"
+
+
 # ── User ──────────────────────────────────────────────────────────────────────
 
 class User(Base):
@@ -613,4 +622,36 @@ class ApiKey(Base):
         Index("ix_api_keys_owner", "owner_id"),
         Index("ix_api_keys_workspace", "workspace_id"),
         Index("ix_api_keys_prefix", "key_prefix"),
+    )
+
+
+# ── Phase 7 models ───────────────────────────────────────────────────────────
+
+class AuditLog(Base):
+    """
+    System-wide audit log for observability & governance.
+    Captures auth events, security scans, admin operations, data access,
+    and system lifecycle events — richer than the workspace-scoped ActivityLog.
+    """
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    category: Mapped[str] = mapped_column(SAEnum(AuditCategory), nullable=False)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)   # e.g. "login", "api_key_created"
+    resource_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # "user", "workspace", ...
+    resource_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    severity: Mapped[str] = mapped_column(String(20), default="info")   # info, warning, critical
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
+
+    # Relationship
+    user: Mapped[Optional["User"]] = relationship()
+
+    __table_args__ = (
+        Index("ix_audit_logs_category_created", "category", "created_at"),
+        Index("ix_audit_logs_user", "user_id"),
+        Index("ix_audit_logs_action", "action"),
     )
