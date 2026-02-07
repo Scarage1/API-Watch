@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, LayoutDashboard, Send, FlaskConical, BarChart3,
   Clock, Settings as SettingsIcon, Sun, Moon, Plus, Command,
+  Plug, Braces, Server, FileText,
 } from 'lucide-react';
 import { useCommandPaletteStore } from '../store/useCommandPaletteStore';
 import { useAppStore } from '../store/useAppStore';
@@ -39,6 +40,10 @@ export default function CommandPalette() {
       { id: 'nav-analytics', label: 'Go to Analytics', section: 'Navigation', icon: BarChart3, action: nav('/analytics') },
       { id: 'nav-history', label: 'Go to History', section: 'Navigation', icon: Clock, action: nav('/history') },
       { id: 'nav-settings', label: 'Go to Settings', section: 'Navigation', icon: SettingsIcon, action: nav('/settings') },
+      { id: 'nav-websocket', label: 'Go to WebSocket Client', section: 'Navigation', icon: Plug, action: nav('/websocket') },
+      { id: 'nav-graphql', label: 'Go to GraphQL Client', section: 'Navigation', icon: Braces, action: nav('/graphql') },
+      { id: 'nav-mocks', label: 'Go to Mock Server', section: 'Navigation', icon: Server, action: nav('/mocks') },
+      { id: 'nav-docs', label: 'Go to Documentation', section: 'Navigation', icon: FileText, action: nav('/docs') },
       // Actions
       {
         id: 'act-new-tab', label: 'New Request Tab', section: 'Actions', icon: Plus,

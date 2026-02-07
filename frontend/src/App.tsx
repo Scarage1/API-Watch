@@ -17,6 +17,10 @@ const TestSuites = lazy(() => import('./pages/TestSuites'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const History = lazy(() => import('./pages/History'));
 const Settings = lazy(() => import('./pages/Settings'));
+const WebSocketClient = lazy(() => import('./pages/WebSocketClient'));
+const GraphQLClient = lazy(() => import('./pages/GraphQLClient'));
+const MockServer = lazy(() => import('./pages/MockServer'));
+const Documentation = lazy(() => import('./pages/Documentation'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -59,6 +63,10 @@ function App() {
             <Route path="suites" element={<TestSuites />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="history" element={<History />} />
+            <Route path="websocket" element={<WebSocketClient />} />
+            <Route path="graphql" element={<GraphQLClient />} />
+            <Route path="mocks" element={<MockServer />} />
+            <Route path="docs" element={<Documentation />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>

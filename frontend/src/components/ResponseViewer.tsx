@@ -10,7 +10,12 @@ import {
   WrapText,
   FlaskConical,
   Terminal,
+  ShieldCheck,
+  Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
+import { validate, generateSchema } from '../lib/schemaValidator';
+import type { JSONSchema, ValidationResult } from '../lib/schemaValidator';
 import { cn, formatDuration, formatBytes } from '../lib/utils';
 import type { TabResponse } from '../store/useRequestStore';
 import TestResultsPanel from './TestResultsPanel';
@@ -20,7 +25,7 @@ interface ResponseViewerProps {
   response: TabResponse;
 }
 
-type ResponseTab = 'body' | 'headers' | 'tests' | 'console';
+type ResponseTab = 'body' | 'headers' | 'tests' | 'console' | 'schema';
 
 /** Minimal JSON / XML syntax highlighter (no external deps) */
 function highlightJson(json: string): string {
@@ -81,6 +86,9 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
   const [activeTab, setActiveTab] = useState<ResponseTab>('body');
   const [copied, setCopied] = useState(false);
   const [wordWrap, setWordWrap] = useState(true);
+  const [schemaText, setSchemaText] = useState('');
+  const [schemaResult, setSchemaResult] = useState<ValidationResult | null>(null);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
 
   const highlighted = useMemo(() => {
     if (!response.response_body) return null;
@@ -252,6 +260,28 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
             )}
           </button>
+          <button
+            onClick={() => setActiveTab('schema')}
+            className={cn(
+              'px-4 py-2.5 text-xs font-medium transition-colors relative',
+              activeTab === 'schema'
+                ? 'text-brand-600 dark:text-brand-400'
+                : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
+            )}
+          >
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3 h-3" />
+              Schema
+              {schemaResult && (
+                <span className={cn('text-[10px] font-bold', schemaResult.valid ? 'text-emerald-500' : 'text-red-500')}>
+                  {schemaResult.valid ? '✓' : `${schemaResult.errors.length}`}
+                </span>
+              )}
+            </div>
+            {activeTab === 'schema' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
+            )}
+          </button>
         </div>
 
         {/* Actions */}
@@ -321,6 +351,89 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
 
         {activeTab === 'console' && (
           <ConsolePanel logs={response.consoleLogs || []} />
+        )}
+
+        {activeTab === 'schema' && (
+          <div className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-surface-600 dark:text-surface-300">JSON Schema Validation</p>
+              <button
+                onClick={() => {
+                  if (!response.response_body) return;
+                  try {
+                    const parsed = JSON.parse(response.response_body);
+                    const generated = generateSchema(parsed);
+                    setSchemaText(JSON.stringify(generated, null, 2));
+                    setSchemaError(null);
+                  } catch {
+                    setSchemaError('Response is not valid JSON');
+                  }
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 rounded-lg text-[11px] font-medium hover:bg-brand-100 dark:hover:bg-brand-900/30 transition-colors"
+              >
+                <Sparkles className="w-3 h-3" /> Auto-generate
+              </button>
+            </div>
+            <textarea
+              value={schemaText}
+              onChange={(e) => setSchemaText(e.target.value)}
+              placeholder='{\n  "type": "object",\n  "required": ["id", "name"],\n  "properties": {\n    "id": { "type": "integer" },\n    "name": { "type": "string" }\n  }\n}'
+              rows={10}
+              className="w-full px-3 py-2.5 bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-xs font-mono resize-y focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+              spellCheck={false}
+            />
+            <button
+              onClick={() => {
+                if (!response.response_body) { setSchemaError('No response body to validate'); return; }
+                if (!schemaText.trim()) { setSchemaError('Enter a JSON Schema'); return; }
+                try {
+                  const schema: JSONSchema = JSON.parse(schemaText);
+                  const body = JSON.parse(response.response_body);
+                  const result = validate(body, schema);
+                  setSchemaResult(result);
+                  setSchemaError(null);
+                } catch (err) {
+                  setSchemaError(err instanceof Error ? err.message : 'Invalid JSON');
+                  setSchemaResult(null);
+                }
+              }}
+              disabled={!schemaText.trim() || !response.response_body}
+              className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-xs font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> Validate
+            </button>
+
+            {schemaError && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded-lg">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> {schemaError}
+              </div>
+            )}
+
+            {schemaResult && (
+              <div className="space-y-2">
+                <div className={cn(
+                  'flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium',
+                  schemaResult.valid
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
+                )}>
+                  {schemaResult.valid ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                  {schemaResult.valid ? 'Schema validation passed' : `${schemaResult.errors.length} validation error${schemaResult.errors.length > 1 ? 's' : ''}`}
+                  <span className="text-[10px] ml-auto opacity-60">{schemaResult.checkedPaths} paths checked</span>
+                </div>
+                {schemaResult.errors.length > 0 && (
+                  <div className="space-y-1">
+                    {schemaResult.errors.map((err, i) => (
+                      <div key={i} className="flex items-start gap-2 px-3 py-2 bg-surface-50 dark:bg-surface-800 rounded-lg text-xs">
+                        <span className="font-mono text-red-500 flex-shrink-0">{err.path}</span>
+                        <span className="text-surface-600 dark:text-surface-400">{err.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
