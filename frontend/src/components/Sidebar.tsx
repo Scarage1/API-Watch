@@ -12,6 +12,7 @@ import {
   Server,
   FileText,
   Users,
+  Activity,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
@@ -28,6 +29,7 @@ const navItems = [
   { to: '/docs', icon: FileText, label: 'Documentation', section: 'tools' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics', section: 'insights' },
   { to: '/history', icon: Clock, label: 'History', section: 'insights' },
+  { to: '/activity', icon: Activity, label: 'Activity', section: 'insights' },
   { to: '/teams', icon: Users, label: 'Teams', section: 'system' },
   { to: '/settings', icon: Settings, label: 'Settings', section: 'system' },
 ];

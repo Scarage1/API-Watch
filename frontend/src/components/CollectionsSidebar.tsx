@@ -9,6 +9,8 @@ import {
   FolderPlus,
   X,
   ArrowUpDown,
+  Share2,
+  History,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import apiClient from '../lib/api';
@@ -17,6 +19,8 @@ import type { HttpMethod, KeyValuePair } from '../store/useRequestStore';
 import { uid } from '../store/useRequestStore';
 import ImportExportPanel from './ImportExportPanel';
 import ConfirmDialog from './ConfirmDialog';
+import ShareCollectionDialog from './ShareCollectionDialog';
+import VersionHistoryDrawer from './VersionHistoryDrawer';
 import { toast } from '../store/useToastStore';
 
 interface SavedRequest {
@@ -56,6 +60,8 @@ export default function CollectionsSidebar() {
   const [creating, setCreating] = useState(false);
   const [showImportExport, setShowImportExport] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [shareTarget, setShareTarget] = useState<{ id: string; name: string } | null>(null);
+  const [versionTarget, setVersionTarget] = useState<{ id: string; name: string } | null>(null);
 
   const fetchCollections = useCallback(async () => {
     try {
@@ -255,6 +261,20 @@ export default function CollectionsSidebar() {
                     )}
                   </button>
                   <button
+                    onClick={() => setShareTarget({ id: col.id, name: col.name })}
+                    className="p-0.5 rounded opacity-0 group-hover:opacity-100 text-surface-400 hover:text-brand-500 transition-opacity"
+                    title="Share collection"
+                  >
+                    <Share2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => setVersionTarget({ id: col.id, name: col.name })}
+                    className="p-0.5 rounded opacity-0 group-hover:opacity-100 text-surface-400 hover:text-brand-500 transition-opacity"
+                    title="Version history"
+                  >
+                    <History className="w-3 h-3" />
+                  </button>
+                  <button
                     onClick={() => setDeleteTarget({ id: col.id, name: col.name })}
                     className="p-0.5 rounded opacity-0 group-hover:opacity-100 text-surface-400 hover:text-red-500 transition-opacity"
                     title="Delete collection"
@@ -307,6 +327,25 @@ export default function CollectionsSidebar() {
         confirmLabel="Delete"
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Share dialog */}
+      {shareTarget && (
+        <ShareCollectionDialog
+          collectionId={shareTarget.id}
+          collectionName={shareTarget.name}
+          onClose={() => setShareTarget(null)}
+          onForked={fetchCollections}
+        />
+      )}
+
+      {/* Version history drawer */}
+      <VersionHistoryDrawer
+        collectionId={versionTarget?.id || ''}
+        collectionName={versionTarget?.name || ''}
+        open={!!versionTarget}
+        onClose={() => setVersionTarget(null)}
+        onRestored={fetchCollections}
       />
     </div>
   );

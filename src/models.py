@@ -1,7 +1,8 @@
 """
 Database models for API-Watch.
 Defines User, Organization, Team, Workspace, Collection, SavedRequest,
-Environment, RequestHistory, MockEndpoint, and Invitation.
+Environment, RequestHistory, MockEndpoint, Invitation, CollectionShare,
+CollectionSnapshot, and ActivityLog.
 """
 import enum
 import uuid
@@ -47,6 +48,25 @@ class InvitationStatus(str, enum.Enum):
     ACCEPTED = "accepted"
     DECLINED = "declined"
     EXPIRED = "expired"
+
+
+class EnvironmentScope(str, enum.Enum):
+    """Environment variable scope."""
+    PERSONAL = "personal"
+    WORKSPACE = "workspace"
+
+
+class ActivityAction(str, enum.Enum):
+    """Activity log action types."""
+    CREATED = "created"
+    UPDATED = "updated"
+    DELETED = "deleted"
+    SHARED = "shared"
+    UNSHARED = "unshared"
+    FORKED = "forked"
+    RESTORED = "restored"
+    INVITED = "invited"
+    JOINED = "joined"
 
 
 # ── User ──────────────────────────────────────────────────────────────────────
@@ -213,6 +233,7 @@ class Collection(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     workspace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=True)
+    forked_from_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("collections.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
@@ -220,6 +241,9 @@ class Collection(Base):
     owner: Mapped["User"] = relationship(back_populates="collections")
     workspace: Mapped[Optional["Workspace"]] = relationship(back_populates="collections")
     requests: Mapped[List["SavedRequest"]] = relationship(back_populates="collection", cascade="all, delete-orphan")
+    forked_from: Mapped[Optional["Collection"]] = relationship(remote_side="Collection.id")
+    snapshots: Mapped[List["CollectionSnapshot"]] = relationship(back_populates="collection", cascade="all, delete-orphan")
+    shares: Mapped[List["CollectionShare"]] = relationship(back_populates="collection", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_collections_owner", "owner_id"),
@@ -264,6 +288,10 @@ class Environment(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     variables: Mapped[dict] = mapped_column(JSON, default=dict)  # {"key": "value", ...}
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    scope: Mapped[EnvironmentScope] = mapped_column(
+        SAEnum(EnvironmentScope), default=EnvironmentScope.PERSONAL, nullable=False,
+    )
+    secret_keys: Mapped[Optional[list]] = mapped_column(JSON, default=list)  # list of keys marked secret
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     workspace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -343,4 +371,77 @@ class MockEndpoint(Base):
         Index("ix_mock_endpoints_owner", "owner_id"),
         Index("ix_mock_endpoints_path", "method", "path"),
         Index("ix_mock_endpoints_workspace", "workspace_id"),
+    )
+
+
+# ── CollectionShare ───────────────────────────────────────────────────────────
+
+class CollectionShare(Base):
+    """Share a collection with a workspace (read-only or read-write)."""
+    __tablename__ = "collection_shares"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    collection_id: Mapped[str] = mapped_column(String(36), ForeignKey("collections.id"), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=False)
+    permission: Mapped[str] = mapped_column(String(20), default="read", nullable=False)  # read | write
+    shared_by_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    # Relationships
+    collection: Mapped["Collection"] = relationship(back_populates="shares")
+    workspace: Mapped["Workspace"] = relationship()
+    shared_by: Mapped["User"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("collection_id", "workspace_id", name="uq_collection_workspace_share"),
+        Index("ix_shares_workspace", "workspace_id"),
+    )
+
+
+# ── CollectionSnapshot ────────────────────────────────────────────────────────
+
+class CollectionSnapshot(Base):
+    """A point-in-time snapshot of a collection and its requests."""
+    __tablename__ = "collection_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    collection_id: Mapped[str] = mapped_column(String(36), ForeignKey("collections.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    snapshot_data: Mapped[dict] = mapped_column(JSON, nullable=False)  # full collection + requests payload
+    created_by_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    # Relationships
+    collection: Mapped["Collection"] = relationship(back_populates="snapshots")
+    created_by: Mapped["User"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("collection_id", "version", name="uq_snapshot_version"),
+        Index("ix_snapshots_collection", "collection_id"),
+    )
+
+
+# ── ActivityLog ───────────────────────────────────────────────────────────────
+
+class ActivityLog(Base):
+    """Audit-style log of workspace mutations."""
+    __tablename__ = "activity_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    workspace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    action: Mapped[ActivityAction] = mapped_column(SAEnum(ActivityAction), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(50), nullable=False)  # collection, environment, workspace, etc.
+    resource_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    resource_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # extra context
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
+
+    # Relationships
+    user: Mapped["User"] = relationship()
+
+    __table_args__ = (
+        Index("ix_activity_workspace_time", "workspace_id", "created_at"),
+        Index("ix_activity_user", "user_id"),
     )

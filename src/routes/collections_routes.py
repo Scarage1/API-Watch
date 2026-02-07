@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import User, Collection, SavedRequest
+from ..models import User, Collection, SavedRequest, ActivityLog, ActivityAction
 from ..jwt_auth import get_current_user
 from ..rbac import get_workspace_id
 
@@ -102,8 +102,25 @@ async def create_collection(
         workspace_id=workspace_id,
     )
     db.add(collection)
+
+    # Activity log
+    log = ActivityLog(
+        workspace_id=workspace_id,
+        user_id=user.id,
+        action=ActivityAction.CREATED,
+        resource_type="collection",
+        resource_id=None,
+        resource_name=body.name,
+    )
+    db.add(log)
+
     await db.commit()
     await db.refresh(collection)
+
+    # Update log with actual ID
+    log.resource_id = collection.id
+    await db.commit()
+
     return {
         "id": collection.id,
         "name": collection.name,
@@ -204,6 +221,17 @@ async def delete_collection(
     collection = result.scalar_one_or_none()
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
+
+    # Activity log
+    log = ActivityLog(
+        workspace_id=workspace_id,
+        user_id=user.id,
+        action=ActivityAction.DELETED,
+        resource_type="collection",
+        resource_id=collection.id,
+        resource_name=collection.name,
+    )
+    db.add(log)
 
     await db.delete(collection)
     await db.commit()

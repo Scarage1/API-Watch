@@ -24,6 +24,7 @@ from src.database import Base
 from src.models import (  # noqa: F401
     User, Collection, SavedRequest, Environment, RequestHistory, MockEndpoint,
     Organization, Team, TeamMember, Workspace, WorkspaceMember, Invitation,
+    CollectionShare, CollectionSnapshot, ActivityLog,
 )
 
 # Alembic Config object
