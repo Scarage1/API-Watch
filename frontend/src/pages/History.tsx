@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import {
   Clock,
   Filter,
@@ -37,6 +37,82 @@ interface HistoryListItem {
   error: string | null;
   timestamp: string;
 }
+
+/** Memoized row component — only re-renders when the item itself changes. */
+const HistoryRow = memo(function HistoryRow({
+  item,
+  onOpenDetail,
+}: {
+  item: HistoryListItem;
+  onOpenDetail: (item: HistoryListItem) => void;
+}) {
+  return (
+    <div
+      onClick={() => onOpenDetail(item)}
+      className="grid grid-cols-12 gap-4 px-6 py-3 hover:bg-surface-50 dark:hover:bg-surface-800/30 transition-colors items-center cursor-pointer group"
+    >
+      <div className="col-span-1">
+        {item.success ? (
+          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+        ) : (
+          <XCircle className="w-4 h-4 text-red-500" />
+        )}
+      </div>
+      <div className="col-span-4 flex items-center gap-2 min-w-0">
+        <span className={cn(
+          'text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded flex-shrink-0',
+          item.request_method === 'GET' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' :
+          item.request_method === 'POST' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' :
+          item.request_method === 'PUT' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' :
+          item.request_method === 'DELETE' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
+          'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400'
+        )}>
+          {item.request_method}
+        </span>
+        <span className="font-mono text-xs text-surface-600 dark:text-surface-300 truncate">
+          {item.request_url}
+        </span>
+      </div>
+      <div className="col-span-1">
+        <span className={cn(
+          'text-xs font-semibold tabular-nums',
+          item.success ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+        )}>
+          {item.status_code || 'ERR'}
+        </span>
+      </div>
+      <div className="col-span-2">
+        <span className="text-xs text-surface-500 tabular-nums">
+          {formatDuration(item.response_time * 1000)}
+        </span>
+      </div>
+      <div className="col-span-1">
+        <span className="text-xs text-surface-500 tabular-nums">
+          {formatBytes(item.response_size)}
+        </span>
+      </div>
+      <div className="col-span-2">
+        <span className="text-xs text-surface-400">
+          {new Date(item.timestamp).toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      </div>
+      <div className="col-span-1 flex justify-end">
+        <button
+          onClick={(e) => { e.stopPropagation(); onOpenDetail(item); }}
+          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 transition-all"
+          title="View details"
+        >
+          <Eye className="w-3.5 h-3.5 text-surface-400" />
+        </button>
+      </div>
+    </div>
+  );
+});
 
 export default function History() {
   const { testHistory, clearHistory } = useAppStore();
@@ -400,71 +476,11 @@ export default function History() {
 
             <div className="divide-y divide-surface-100 dark:divide-surface-800/50">
               {displayItems.map((item, idx) => (
-                <div
+                <HistoryRow
                   key={item.id || idx}
-                  onClick={() => openDetail(item)}
-                  className="grid grid-cols-12 gap-4 px-6 py-3 hover:bg-surface-50 dark:hover:bg-surface-800/30 transition-colors items-center cursor-pointer group"
-                >
-                  <div className="col-span-1">
-                    {item.success ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-red-500" />
-                    )}
-                  </div>
-                  <div className="col-span-4 flex items-center gap-2 min-w-0">
-                    <span className={cn(
-                      'text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded flex-shrink-0',
-                      item.request_method === 'GET' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' :
-                      item.request_method === 'POST' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' :
-                      item.request_method === 'PUT' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' :
-                      item.request_method === 'DELETE' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
-                      'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400'
-                    )}>
-                      {item.request_method}
-                    </span>
-                    <span className="font-mono text-xs text-surface-600 dark:text-surface-300 truncate">
-                      {item.request_url}
-                    </span>
-                  </div>
-                  <div className="col-span-1">
-                    <span className={cn(
-                      'text-xs font-semibold tabular-nums',
-                      item.success ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-                    )}>
-                      {item.status_code || 'ERR'}
-                    </span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-xs text-surface-500 tabular-nums">
-                      {formatDuration(item.response_time * 1000)}
-                    </span>
-                  </div>
-                  <div className="col-span-1">
-                    <span className="text-xs text-surface-500 tabular-nums">
-                      {formatBytes(item.response_size)}
-                    </span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-xs text-surface-400">
-                      {new Date(item.timestamp).toLocaleDateString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                  <div className="col-span-1 flex justify-end">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openDetail(item); }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 transition-all"
-                      title="View details"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-surface-400" />
-                    </button>
-                  </div>
-                </div>
+                  item={item}
+                  onOpenDetail={openDetail}
+                />
               ))}
             </div>
           </div>

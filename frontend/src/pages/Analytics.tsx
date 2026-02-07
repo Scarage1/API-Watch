@@ -33,6 +33,25 @@ const COLORS = {
   purple: '#8b5cf6',
 };
 
+// Static objects extracted outside the component to avoid re-creation on every render
+const TOOLTIP_STYLE = {
+  backgroundColor: 'rgba(15, 23, 42, 0.95)',
+  border: '1px solid rgba(51, 65, 85, 0.5)',
+  borderRadius: '12px',
+  color: '#f1f5f9',
+  fontSize: '12px',
+  padding: '8px 12px',
+  boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
+} as const;
+
+const METHOD_COLORS: Record<string, string> = {
+  GET: COLORS.success,
+  POST: COLORS.blue,
+  PUT: COLORS.amber,
+  DELETE: COLORS.error,
+  PATCH: COLORS.purple,
+};
+
 export default function Analytics() {
   const { testHistory } = useAppStore();
 
@@ -138,16 +157,6 @@ export default function Analytics() {
     };
   }, [testHistory]);
 
-  const tooltipStyle = {
-    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-    border: '1px solid rgba(51, 65, 85, 0.5)',
-    borderRadius: '12px',
-    color: '#f1f5f9',
-    fontSize: '12px',
-    padding: '8px 12px',
-    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
-  };
-
   if (!analytics) {
     return (
       <div className="space-y-6">
@@ -176,14 +185,6 @@ export default function Analytics() {
     { label: 'Avg Response', value: `${analytics.avg.toFixed(0)}ms`, icon: Clock, color: 'text-blue-600 dark:text-blue-400' },
     { label: 'Total Requests', value: `${analytics.total}`, icon: Activity, color: 'text-purple-600 dark:text-purple-400' },
   ];
-
-  const methodColors: Record<string, string> = {
-    GET: COLORS.success,
-    POST: COLORS.blue,
-    PUT: COLORS.amber,
-    DELETE: COLORS.error,
-    PATCH: COLORS.purple,
-  };
 
   return (
     <div className="space-y-6">
@@ -216,7 +217,7 @@ export default function Analytics() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
               <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
               <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
               <Bar dataKey="count" name="Requests" radius={[4, 4, 0, 0]} fill={COLORS.brand} />
             </BarChart>
           </ResponsiveContainer>
@@ -241,7 +242,7 @@ export default function Analytics() {
                   <Cell fill={COLORS.success} />
                   <Cell fill={COLORS.error} />
                 </Pie>
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-3">
@@ -283,7 +284,7 @@ export default function Analytics() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
               <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
               <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} unit="ms" />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
               <Area type="monotone" dataKey="avg" name="Avg" stroke={COLORS.brand} strokeWidth={2} fill="url(#avgGradient)" dot={{ fill: COLORS.brand, r: 3 }} />
               <Area type="monotone" dataKey="p95" name="P95" stroke={COLORS.amber} strokeWidth={2} fill="transparent" strokeDasharray="5 3" dot={{ fill: COLORS.amber, r: 3 }} />
             </AreaChart>
@@ -299,10 +300,10 @@ export default function Analytics() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
               <XAxis dataKey="method" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
               <Bar dataKey="count" name="Requests" radius={[4, 4, 0, 0]}>
                 {analytics.methodData.map((entry) => (
-                  <Cell key={entry.method} fill={methodColors[entry.method] || COLORS.brand} />
+                  <Cell key={entry.method} fill={METHOD_COLORS[entry.method] || COLORS.brand} />
                 ))}
               </Bar>
             </BarChart>
