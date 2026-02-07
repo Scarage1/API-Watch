@@ -139,3 +139,28 @@ class RequestHistory(Base):
     __table_args__ = (
         Index("ix_history_owner_timestamp", "owner_id", "timestamp"),
     )
+
+
+class MockEndpoint(Base):
+    """A mock API endpoint that returns predefined responses."""
+    __tablename__ = "mock_endpoints"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    method: Mapped[str] = mapped_column(String(10), nullable=False, default="GET")
+    path: Mapped[str] = mapped_column(String(500), nullable=False)  # e.g. /api/users
+    status_code: Mapped[int] = mapped_column(Integer, default=200)
+    response_body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    response_headers: Mapped[Optional[dict]] = mapped_column(JSON, default=dict)
+    delay_ms: Mapped[int] = mapped_column(Integer, default=0)  # simulated latency
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    hit_count: Mapped[int] = mapped_column(Integer, default=0)
+    owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_mock_endpoints_owner", "owner_id"),
+        Index("ix_mock_endpoints_path", "method", "path"),
+    )

@@ -30,7 +30,7 @@ from src.diagnose import DiagnosisEngine
 from src.database import init_db, close_db, get_db
 from src.models import RequestHistory
 from src.jwt_auth import get_optional_user
-from src.routes import api_v1_router
+from src.routes import api_v1_router, mock_catch_router
 from src.rate_limit import RateLimitMiddleware, RateLimitConfig
 
 # Setup logging
@@ -82,6 +82,9 @@ app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
 
 # Include v1 API routes
 app.include_router(api_v1_router)
+
+# Mock server catch-all (no auth, matches /mock-server/*)
+app.include_router(mock_catch_router)
 
 
 # --- Request Models (legacy endpoints) ---

@@ -7,6 +7,10 @@ import {
   Clock,
   Settings,
   X,
+  Plug,
+  Braces,
+  Server,
+  FileText,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
@@ -16,6 +20,10 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', section: 'main' },
   { to: '/request', icon: Send, label: 'Request', section: 'main' },
   { to: '/suites', icon: FolderOpen, label: 'Test Suites', section: 'main' },
+  { to: '/websocket', icon: Plug, label: 'WebSocket', section: 'main' },
+  { to: '/graphql', icon: Braces, label: 'GraphQL', section: 'main' },
+  { to: '/mocks', icon: Server, label: 'Mock Server', section: 'tools' },
+  { to: '/docs', icon: FileText, label: 'Documentation', section: 'tools' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics', section: 'insights' },
   { to: '/history', icon: Clock, label: 'History', section: 'insights' },
   { to: '/settings', icon: Settings, label: 'Settings', section: 'system' },
@@ -26,6 +34,7 @@ export default function Sidebar() {
 
   const sections = {
     main: 'Build',
+    tools: 'Tools',
     insights: 'Insights',
     system: 'System',
   };
