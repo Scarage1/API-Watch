@@ -22,6 +22,7 @@ const WebSocketClient = lazy(() => import('./pages/WebSocketClient'));
 const GraphQLClient = lazy(() => import('./pages/GraphQLClient'));
 const MockServer = lazy(() => import('./pages/MockServer'));
 const Documentation = lazy(() => import('./pages/Documentation'));
+const TeamSettings = lazy(() => import('./pages/TeamSettings'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -68,6 +69,7 @@ function App() {
             <Route path="graphql" element={<ErrorBoundary><GraphQLClient /></ErrorBoundary>} />
             <Route path="mocks" element={<ErrorBoundary><MockServer /></ErrorBoundary>} />
             <Route path="docs" element={<ErrorBoundary><Documentation /></ErrorBoundary>} />
+            <Route path="teams" element={<ErrorBoundary><TeamSettings /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
           </Route>
         </Routes>

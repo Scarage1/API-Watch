@@ -1,12 +1,15 @@
 """
 Database models for API-Watch.
-Defines User, Collection, SavedRequest, Environment, and RequestHistory.
+Defines User, Organization, Team, Workspace, Collection, SavedRequest,
+Environment, RequestHistory, MockEndpoint, and Invitation.
 """
+import enum
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy import (
-    String, Integer, Float, Boolean, Text, DateTime, ForeignKey, JSON, Index
+    String, Integer, Float, Boolean, Text, DateTime, ForeignKey, JSON, Index,
+    Enum as SAEnum, UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +25,32 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# ── Enums ─────────────────────────────────────────────────────────────────────
+
+class OrgRole(str, enum.Enum):
+    """Organization-level role."""
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
+class WorkspaceRole(str, enum.Enum):
+    """Workspace-level role."""
+    ADMIN = "admin"
+    EDITOR = "editor"
+    VIEWER = "viewer"
+
+
+class InvitationStatus(str, enum.Enum):
+    """Invitation lifecycle."""
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    EXPIRED = "expired"
+
+
+# ── User ──────────────────────────────────────────────────────────────────────
+
 class User(Base):
     """User account."""
     __tablename__ = "users"
@@ -31,6 +60,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    default_workspace_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
@@ -38,7 +68,141 @@ class User(Base):
     collections: Mapped[List["Collection"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     environments: Mapped[List["Environment"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     history: Mapped[List["RequestHistory"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
+    owned_organizations: Mapped[List["Organization"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
+    team_memberships: Mapped[List["TeamMember"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    workspace_memberships: Mapped[List["WorkspaceMember"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
+
+# ── Organization ──────────────────────────────────────────────────────────────
+
+class Organization(Base):
+    """An organization groups teams and workspaces."""
+    __tablename__ = "organizations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    # Relationships
+    owner: Mapped["User"] = relationship(back_populates="owned_organizations")
+    teams: Mapped[List["Team"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    workspaces: Mapped[List["Workspace"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+
+
+# ── Team ──────────────────────────────────────────────────────────────────────
+
+class Team(Base):
+    """A team within an organization."""
+    __tablename__ = "teams"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship(back_populates="teams")
+    members: Mapped[List["TeamMember"]] = relationship(back_populates="team", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_team_org_name"),
+        Index("ix_teams_organization", "organization_id"),
+    )
+
+
+class TeamMember(Base):
+    """Association between users and teams with a role."""
+    __tablename__ = "team_members"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    team_id: Mapped[str] = mapped_column(String(36), ForeignKey("teams.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    role: Mapped[OrgRole] = mapped_column(SAEnum(OrgRole), default=OrgRole.MEMBER, nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    # Relationships
+    team: Mapped["Team"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship(back_populates="team_memberships")
+
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", name="uq_team_member"),
+        Index("ix_team_members_user", "user_id"),
+    )
+
+
+# ── Workspace ─────────────────────────────────────────────────────────────────
+
+class Workspace(Base):
+    """A workspace scopes collections, environments, and mocks."""
+    __tablename__ = "workspaces"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_personal: Mapped[bool] = mapped_column(Boolean, default=False)
+    organization_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("organizations.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    # Relationships
+    organization: Mapped[Optional["Organization"]] = relationship(back_populates="workspaces")
+    members: Mapped[List["WorkspaceMember"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+    collections: Mapped[List["Collection"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+    environments: Mapped[List["Environment"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+    mock_endpoints: Mapped[List["MockEndpoint"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_workspaces_organization", "organization_id"),
+    )
+
+
+class WorkspaceMember(Base):
+    """Association between users and workspaces with a role."""
+    __tablename__ = "workspace_members"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    role: Mapped[WorkspaceRole] = mapped_column(SAEnum(WorkspaceRole), default=WorkspaceRole.EDITOR, nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    # Relationships
+    workspace: Mapped["Workspace"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship(back_populates="workspace_memberships")
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="uq_workspace_member"),
+        Index("ix_workspace_members_user", "user_id"),
+    )
+
+
+# ── Invitation ────────────────────────────────────────────────────────────────
+
+class Invitation(Base):
+    """Invitation to join a workspace."""
+    __tablename__ = "invitations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=False)
+    role: Mapped[WorkspaceRole] = mapped_column(SAEnum(WorkspaceRole), default=WorkspaceRole.EDITOR, nullable=False)
+    invited_by_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    status: Mapped[InvitationStatus] = mapped_column(SAEnum(InvitationStatus), default=InvitationStatus.PENDING, nullable=False)
+    token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_invitations_workspace", "workspace_id"),
+    )
+
+
+# ── Collection ────────────────────────────────────────────────────────────────
 
 class Collection(Base):
     """A collection groups saved requests (like Postman collections)."""
@@ -48,15 +212,18 @@ class Collection(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    workspace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     owner: Mapped["User"] = relationship(back_populates="collections")
+    workspace: Mapped[Optional["Workspace"]] = relationship(back_populates="collections")
     requests: Mapped[List["SavedRequest"]] = relationship(back_populates="collection", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_collections_owner", "owner_id"),
+        Index("ix_collections_workspace", "workspace_id"),
     )
 
 
@@ -98,14 +265,17 @@ class Environment(Base):
     variables: Mapped[dict] = mapped_column(JSON, default=dict)  # {"key": "value", ...}
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    workspace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     owner: Mapped["User"] = relationship(back_populates="environments")
+    workspace: Mapped[Optional["Workspace"]] = relationship(back_populates="environments")
 
     __table_args__ = (
         Index("ix_environments_owner", "owner_id"),
+        Index("ix_environments_workspace", "workspace_id"),
     )
 
 
@@ -162,10 +332,15 @@ class MockEndpoint(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     hit_count: Mapped[int] = mapped_column(Integer, default=0)
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    workspace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    # Relationships
+    workspace: Mapped[Optional["Workspace"]] = relationship(back_populates="mock_endpoints")
 
     __table_args__ = (
         Index("ix_mock_endpoints_owner", "owner_id"),
         Index("ix_mock_endpoints_path", "method", "path"),
+        Index("ix_mock_endpoints_workspace", "workspace_id"),
     )

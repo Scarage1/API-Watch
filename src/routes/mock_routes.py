@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_db
 from src.jwt_auth import get_current_user
 from src.models import MockEndpoint, User
+from src.rbac import get_workspace_id
 
 router = APIRouter(prefix="/mock", tags=["mock"])
 
@@ -82,14 +83,17 @@ def _to_response(mock: MockEndpoint) -> dict:
 @router.get("/endpoints", response_model=List[MockEndpointResponse])
 async def list_mock_endpoints(
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all mock endpoints for the current user."""
-    result = await db.execute(
-        select(MockEndpoint)
-        .where(MockEndpoint.owner_id == user.id)
-        .order_by(MockEndpoint.created_at.desc())
-    )
+    """List all mock endpoints for the current user/workspace."""
+    query = select(MockEndpoint)
+    if workspace_id:
+        query = query.where(MockEndpoint.workspace_id == workspace_id)
+    else:
+        query = query.where(MockEndpoint.owner_id == user.id)
+    query = query.order_by(MockEndpoint.created_at.desc())
+    result = await db.execute(query)
     mocks = result.scalars().all()
     return [_to_response(m) for m in mocks]
 
@@ -98,6 +102,7 @@ async def list_mock_endpoints(
 async def create_mock_endpoint(
     data: MockEndpointCreate,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new mock endpoint."""
@@ -115,6 +120,7 @@ async def create_mock_endpoint(
         delay_ms=data.delay_ms,
         is_active=data.is_active,
         owner_id=user.id,
+        workspace_id=workspace_id,
     )
     db.add(mock)
     await db.commit()

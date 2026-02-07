@@ -1,5 +1,6 @@
 """
 Collections & Saved Requests CRUD routes.
+Workspace-aware: when X-Workspace-Id header is sent, scopes to that workspace.
 """
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from ..database import get_db
 from ..models import User, Collection, SavedRequest
 from ..jwt_auth import get_current_user
+from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/collections", tags=["Collections"])
 
@@ -60,15 +62,17 @@ class CollectionUpdate(BaseModel):
 @router.get("")
 async def list_collections(
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all collections for the current user."""
-    result = await db.execute(
-        select(Collection)
-        .where(Collection.owner_id == user.id)
-        .options(selectinload(Collection.requests))
-        .order_by(Collection.created_at.desc())
-    )
+    """List all collections for the current user/workspace."""
+    query = select(Collection).options(selectinload(Collection.requests))
+    if workspace_id:
+        query = query.where(Collection.workspace_id == workspace_id)
+    else:
+        query = query.where(Collection.owner_id == user.id)
+    query = query.order_by(Collection.created_at.desc())
+    result = await db.execute(query)
     collections = result.scalars().all()
     return [
         {
@@ -87,6 +91,7 @@ async def list_collections(
 async def create_collection(
     body: CollectionCreate,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new collection."""
@@ -94,6 +99,7 @@ async def create_collection(
         name=body.name,
         description=body.description,
         owner_id=user.id,
+        workspace_id=workspace_id,
     )
     db.add(collection)
     await db.commit()
@@ -112,14 +118,16 @@ async def create_collection(
 async def get_collection(
     collection_id: str,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a collection with its requests."""
-    result = await db.execute(
-        select(Collection)
-        .where(Collection.id == collection_id, Collection.owner_id == user.id)
-        .options(selectinload(Collection.requests))
-    )
+    query = select(Collection).where(Collection.id == collection_id).options(selectinload(Collection.requests))
+    if workspace_id:
+        query = query.where(Collection.workspace_id == workspace_id)
+    else:
+        query = query.where(Collection.owner_id == user.id)
+    result = await db.execute(query)
     collection = result.scalar_one_or_none()
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -155,12 +163,16 @@ async def update_collection(
     collection_id: str,
     body: CollectionUpdate,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a collection."""
-    result = await db.execute(
-        select(Collection).where(Collection.id == collection_id, Collection.owner_id == user.id)
-    )
+    query = select(Collection).where(Collection.id == collection_id)
+    if workspace_id:
+        query = query.where(Collection.workspace_id == workspace_id)
+    else:
+        query = query.where(Collection.owner_id == user.id)
+    result = await db.execute(query)
     collection = result.scalar_one_or_none()
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -179,12 +191,16 @@ async def update_collection(
 async def delete_collection(
     collection_id: str,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a collection and all its requests."""
-    result = await db.execute(
-        select(Collection).where(Collection.id == collection_id, Collection.owner_id == user.id)
-    )
+    query = select(Collection).where(Collection.id == collection_id)
+    if workspace_id:
+        query = query.where(Collection.workspace_id == workspace_id)
+    else:
+        query = query.where(Collection.owner_id == user.id)
+    result = await db.execute(query)
     collection = result.scalar_one_or_none()
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -200,13 +216,16 @@ async def create_request(
     collection_id: str,
     body: SavedRequestCreate,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Add a request to a collection."""
-    # Verify collection ownership
-    result = await db.execute(
-        select(Collection).where(Collection.id == collection_id, Collection.owner_id == user.id)
-    )
+    query = select(Collection).where(Collection.id == collection_id)
+    if workspace_id:
+        query = query.where(Collection.workspace_id == workspace_id)
+    else:
+        query = query.where(Collection.owner_id == user.id)
+    result = await db.execute(query)
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Collection not found")
 
@@ -242,13 +261,16 @@ async def update_request(
     request_id: str,
     body: SavedRequestUpdate,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a saved request."""
-    # Verify collection ownership
-    col_result = await db.execute(
-        select(Collection).where(Collection.id == collection_id, Collection.owner_id == user.id)
-    )
+    query = select(Collection).where(Collection.id == collection_id)
+    if workspace_id:
+        query = query.where(Collection.workspace_id == workspace_id)
+    else:
+        query = query.where(Collection.owner_id == user.id)
+    col_result = await db.execute(query)
     if not col_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Collection not found")
 
@@ -280,12 +302,16 @@ async def delete_request(
     collection_id: str,
     request_id: str,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a saved request."""
-    col_result = await db.execute(
-        select(Collection).where(Collection.id == collection_id, Collection.owner_id == user.id)
-    )
+    query = select(Collection).where(Collection.id == collection_id)
+    if workspace_id:
+        query = query.where(Collection.workspace_id == workspace_id)
+    else:
+        query = query.where(Collection.owner_id == user.id)
+    col_result = await db.execute(query)
     if not col_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Collection not found")
 

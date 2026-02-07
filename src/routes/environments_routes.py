@@ -1,5 +1,6 @@
 """
 Environments CRUD routes.
+Workspace-aware: when X-Workspace-Id header is sent, scopes to that workspace.
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models import User, Environment
 from ..jwt_auth import get_current_user
+from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/environments", tags=["Environments"])
 
@@ -33,14 +35,17 @@ class EnvironmentUpdate(BaseModel):
 @router.get("")
 async def list_environments(
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all environments for the current user."""
-    result = await db.execute(
-        select(Environment)
-        .where(Environment.owner_id == user.id)
-        .order_by(Environment.name)
-    )
+    """List all environments for the current user/workspace."""
+    query = select(Environment)
+    if workspace_id:
+        query = query.where(Environment.workspace_id == workspace_id)
+    else:
+        query = query.where(Environment.owner_id == user.id)
+    query = query.order_by(Environment.name)
+    result = await db.execute(query)
     envs = result.scalars().all()
     return [
         {
@@ -58,6 +63,7 @@ async def list_environments(
 async def create_environment(
     body: EnvironmentCreate,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new environment."""
@@ -66,6 +72,7 @@ async def create_environment(
         variables=body.variables,
         is_active=body.is_active,
         owner_id=user.id,
+        workspace_id=workspace_id,
     )
 
     # If setting this one active, deactivate others
@@ -90,14 +97,16 @@ async def create_environment(
 @router.get("/active")
 async def get_active_environment(
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get the currently active environment."""
-    result = await db.execute(
-        select(Environment).where(
-            Environment.owner_id == user.id, Environment.is_active == True
-        )
-    )
+    query = select(Environment).where(Environment.is_active == True)
+    if workspace_id:
+        query = query.where(Environment.workspace_id == workspace_id)
+    else:
+        query = query.where(Environment.owner_id == user.id)
+    result = await db.execute(query)
     env = result.scalar_one_or_none()
     if not env:
         return None
@@ -113,12 +122,16 @@ async def update_environment(
     env_id: str,
     body: EnvironmentUpdate,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update an environment."""
-    result = await db.execute(
-        select(Environment).where(Environment.id == env_id, Environment.owner_id == user.id)
-    )
+    query = select(Environment).where(Environment.id == env_id)
+    if workspace_id:
+        query = query.where(Environment.workspace_id == workspace_id)
+    else:
+        query = query.where(Environment.owner_id == user.id)
+    result = await db.execute(query)
     env = result.scalar_one_or_none()
     if not env:
         raise HTTPException(status_code=404, detail="Environment not found")
@@ -149,12 +162,16 @@ async def update_environment(
 async def delete_environment(
     env_id: str,
     user: User = Depends(get_current_user),
+    workspace_id: Optional[str] = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete an environment."""
-    result = await db.execute(
-        select(Environment).where(Environment.id == env_id, Environment.owner_id == user.id)
-    )
+    query = select(Environment).where(Environment.id == env_id)
+    if workspace_id:
+        query = query.where(Environment.workspace_id == workspace_id)
+    else:
+        query = query.where(Environment.owner_id == user.id)
+    result = await db.execute(query)
     env = result.scalar_one_or_none()
     if not env:
         raise HTTPException(status_code=404, detail="Environment not found")

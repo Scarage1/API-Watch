@@ -11,10 +11,12 @@ import {
   Braces,
   Server,
   FileText,
+  Users,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
 import CollectionsSidebar from './CollectionsSidebar';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', section: 'main' },
@@ -26,6 +28,7 @@ const navItems = [
   { to: '/docs', icon: FileText, label: 'Documentation', section: 'tools' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics', section: 'insights' },
   { to: '/history', icon: Clock, label: 'History', section: 'insights' },
+  { to: '/teams', icon: Users, label: 'Teams', section: 'system' },
   { to: '/settings', icon: Settings, label: 'Settings', section: 'system' },
 ];
 
@@ -79,6 +82,7 @@ export default function Sidebar() {
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-2 space-y-5 overflow-y-auto">
+            <WorkspaceSwitcher />
             {groupedItems.map((group) => (
               <div key={group.label}>
                 <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-surface-400 dark:text-surface-500">

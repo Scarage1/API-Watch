@@ -7,7 +7,7 @@ from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import User
+from ..models import User, Workspace, WorkspaceMember, WorkspaceRole
 from ..jwt_auth import (
     RegisterRequest, LoginRequest, TokenResponse, RefreshRequest,
     hash_password, verify_password,
@@ -38,6 +38,25 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
         hashed_password=hash_password(body.password),
     )
     db.add(user)
+    await db.flush()
+
+    # Auto-create personal workspace
+    personal_ws = Workspace(
+        name=f"{body.username}'s Workspace",
+        is_personal=True,
+    )
+    db.add(personal_ws)
+    await db.flush()
+
+    ws_member = WorkspaceMember(
+        workspace_id=personal_ws.id,
+        user_id=user.id,
+        role=WorkspaceRole.ADMIN,
+    )
+    db.add(ws_member)
+
+    user.default_workspace_id = personal_ws.id
+
     await db.commit()
     await db.refresh(user)
 
@@ -47,7 +66,12 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     return TokenResponse(
         access_token=access,
         refresh_token=refresh,
-        user={"id": user.id, "email": user.email, "username": user.username},
+        user={
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "default_workspace_id": user.default_workspace_id,
+        },
     )
 
 
@@ -79,7 +103,12 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     return TokenResponse(
         access_token=access,
         refresh_token=refresh,
-        user={"id": user.id, "email": user.email, "username": user.username},
+        user={
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "default_workspace_id": user.default_workspace_id,
+        },
     )
 
 
@@ -110,7 +139,12 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
     return TokenResponse(
         access_token=access,
         refresh_token=refresh,
-        user={"id": user.id, "email": user.email, "username": user.username},
+        user={
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "default_workspace_id": user.default_workspace_id,
+        },
     )
 
 
@@ -121,6 +155,7 @@ async def get_profile(user: User = Depends(get_current_user)):
         "id": user.id,
         "email": user.email,
         "username": user.username,
+        "default_workspace_id": user.default_workspace_id,
         "created_at": user.created_at.isoformat(),
     }
 
