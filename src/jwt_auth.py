@@ -174,20 +174,53 @@ async def is_token_blacklisted(jti: str) -> bool:
 
 # --- FastAPI dependencies ---
 
+# ── Default open-source user (no auth required) ──────────────────────────────
+
+_DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000000"
+_DEFAULT_USERNAME = "user"
+_DEFAULT_EMAIL = "user@apiwatch.local"
+
+
+async def _get_or_create_default_user(db: AsyncSession) -> User:
+    """Return the default open-source user, creating it if needed."""
+    result = await db.execute(select(User).where(User.id == _DEFAULT_USER_ID))
+    user = result.scalar_one_or_none()
+    if user:
+        return user
+
+    # Auto-create the default user + personal workspace
+    from .models import Workspace, WorkspaceMember, WorkspaceRole
+
+    user = User(
+        id=_DEFAULT_USER_ID,
+        email=_DEFAULT_EMAIL,
+        username=_DEFAULT_USERNAME,
+        hashed_password=hash_password("not-used"),
+    )
+    db.add(user)
+    await db.flush()
+
+    ws = Workspace(name="Default Workspace", is_personal=True)
+    db.add(ws)
+    await db.flush()
+
+    db.add(WorkspaceMember(workspace_id=ws.id, user_id=user.id, role=WorkspaceRole.ADMIN))
+    user.default_workspace_id = ws.id
+    await db.commit()
+    await db.refresh(user)
+    logger.info("Created default open-source user (id=%s, workspace=%s)", user.id, ws.id)
+    return user
+
+
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """FastAPI dependency — extracts and verifies user from JWT Bearer token
-    or X-API-Key header."""
-    from fastapi import Request
-    # We can't easily inject Request here alongside Depends, so API key
-    # auth is handled via a separate dependency; this remains JWT-only.
+    """FastAPI dependency — returns authenticated user from JWT, or the
+    default open-source user when no credentials are provided."""
     if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
+        # Open-source mode: return default user (no login required)
+        return await _get_or_create_default_user(db)
 
     payload = decode_token(credentials.credentials)
     if payload.get("type") != "access":
@@ -255,10 +288,8 @@ async def get_current_user_or_apikey(
     if x_api_key:
         return await _resolve_api_key(x_api_key, db)
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Authentication required (Bearer token or X-API-Key)",
-    )
+    # Open-source mode: no credentials at all → default user
+    return await _get_or_create_default_user(db)
 
 
 async def _resolve_api_key(raw_key: str, db: AsyncSession) -> User:

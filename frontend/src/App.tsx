@@ -1,13 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import Layout from './components/Layout';
-import AuthPage from './pages/AuthPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import CommandPalette from './components/CommandPalette';
 import OnboardingModal from './components/OnboardingModal';
 import { useAppStore } from './store/useAppStore';
-import { useAuthStore } from './store/useAuthStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import LoadingSpinner from './components/LoadingSpinner';
 
@@ -29,15 +27,8 @@ const MonitorDashboard = lazy(() => import('./pages/MonitorDashboard'));
 const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'));
 const ImportExportPage = lazy(() => import('./pages/ImportExportPage'));
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore();
-  if (!isAuthenticated) return <Navigate to="/auth" replace />;
-  return <>{children}</>;
-}
-
 function App() {
   const { darkMode } = useAppStore();
-  const { isAuthenticated } = useAuthStore();
 
   // Register global keyboard shortcuts
   useKeyboardShortcuts();
@@ -64,8 +55,7 @@ function App() {
       <ErrorBoundary>
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
-          <Route path="/auth" element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/" element={<Layout />}>
             <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
             <Route path="request" element={<ErrorBoundary><SingleRequest /></ErrorBoundary>} />
             <Route path="suites" element={<ErrorBoundary><TestSuites /></ErrorBoundary>} />

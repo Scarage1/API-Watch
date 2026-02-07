@@ -99,18 +99,13 @@ class Settings(BaseSettings):
         # Allow empty only when TESTING or local development
         if os.getenv("TESTING", "").lower() in ("true", "1"):
             return "test-only-insecure-key"
-        if os.getenv("ENVIRONMENT", "development").lower() in ("development", "dev", "local"):
-            generated = secrets.token_hex(32)
-            logger.warning(
-                "⚠️  JWT_SECRET_KEY not set — auto-generated an ephemeral key. "
-                "Sessions will NOT survive restarts."
-            )
-            return generated
-        # In production, refuse to start without a proper secret
-        raise ValueError(
-            "JWT_SECRET_KEY must be set in production. "
-            "Generate one with: openssl rand -hex 32"
+        # Auth is optional (open-source mode) — auto-generate a key silently
+        generated = secrets.token_hex(32)
+        logger.warning(
+            "⚠️  JWT_SECRET_KEY not set — auto-generated an ephemeral key. "
+            "Sessions will NOT survive restarts."
         )
+        return generated
 
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
