@@ -152,6 +152,7 @@ export default function SingleRequest() {
           scriptError: preResult.error,
         });
         toast.error('Pre-request script failed', preResult.error);
+        setLoading(tabId, false);
         return;
       }
 
@@ -268,6 +269,8 @@ export default function SingleRequest() {
         consoleLogs: preScriptLogs,
       });
       toast.error('Request failed', message);
+    } finally {
+      setLoading(tabId, false);
     }
   }, [tab, envVars, setLoading, setResponse, addToHistory]);
 
