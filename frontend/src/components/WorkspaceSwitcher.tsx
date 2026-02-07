@@ -3,7 +3,7 @@
  */
 import { useEffect, useState, useRef } from 'react';
 import { ChevronDown, Plus, Check, Building2 } from 'lucide-react';
-import { useWorkspaceStore, WorkspaceEntry } from '../store/useWorkspaceStore';
+import { useWorkspaceStore } from '../store/useWorkspaceStore';
 import { cn } from '../lib/utils';
 
 export default function WorkspaceSwitcher() {

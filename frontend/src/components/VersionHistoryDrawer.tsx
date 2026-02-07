@@ -28,7 +28,7 @@ interface Props {
 
 export default function VersionHistoryDrawer({
   collectionId,
-  collectionName,
+  collectionName: _collectionName,
   open,
   onClose,
   onRestored,

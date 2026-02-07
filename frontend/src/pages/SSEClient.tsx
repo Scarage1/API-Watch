@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Radio, Unplug, Trash2, Loader2,
+  Radio, Unplug, Trash2,
   ArrowDownCircle, AlertCircle, Copy, Check, Pause, Play,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -42,7 +42,6 @@ export default function SSEClient() {
   const [paused, setPaused] = useState(false);
   const [filterType, setFilterType] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [customHeaders, setCustomHeaders] = useState('');
   const [withCredentials, setWithCredentials] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -170,7 +169,7 @@ export default function SSEClient() {
             disabled={!url.trim()}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
           >
-            {status === 'connecting' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
+            <Radio className="w-4 h-4" />
             Connect
           </button>
         ) : (

@@ -4,8 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import {
-  Users, UserPlus, Shield, Trash2, Mail, Check, X, Building2,
-  Crown, Pencil, Eye,
+  Users, UserPlus, Trash2, Mail, X,
 } from 'lucide-react';
 import apiClient from '../lib/api';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
@@ -29,12 +28,6 @@ interface PendingInvite {
   created_at: string;
   expires_at: string;
 }
-
-const ROLE_ICONS: Record<string, typeof Shield> = {
-  admin: Crown,
-  editor: Pencil,
-  viewer: Eye,
-};
 
 const ROLE_COLORS: Record<string, string> = {
   admin: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/20',
@@ -210,7 +203,6 @@ export default function TeamSettings() {
         ) : (
           <div className="divide-y divide-surface-100 dark:divide-surface-700">
             {members.map((m) => {
-              const RoleIcon = ROLE_ICONS[m.role] || Shield;
               return (
                 <div key={m.id} className="flex items-center gap-3 px-5 py-3">
                   <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-sm font-semibold text-brand-700 dark:text-brand-300">
