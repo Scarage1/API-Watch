@@ -29,6 +29,7 @@ from src.runner import APIRunner, RequestConfig, RequestResult
 from src.diagnose import DiagnosisEngine
 from src.database import init_db, close_db, get_db, check_db_health
 from src.models import RequestHistory
+from src.jwt_auth import get_current_user
 from src.routes import api_v1_router, mock_catch_router
 from src.rate_limit import RateLimitMiddleware, RateLimitConfig
 from src.cache import get_cache, close_cache
@@ -300,6 +301,7 @@ async def health_check():
 async def execute_single_request(
     request_input: RequestConfigInput,
     db: AsyncSession = Depends(get_db),
+    user = Depends(get_current_user),
 ):
     """Execute a single API request (async via httpx)."""
     try:
@@ -366,6 +368,7 @@ async def execute_single_request(
 async def execute_test_suite(
     suite_input: TestSuiteInput,
     db: AsyncSession = Depends(get_db),
+    user = Depends(get_current_user),
 ) -> List[RequestResult]:
     """Execute a test suite (async via httpx)."""
     try:

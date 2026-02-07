@@ -31,8 +31,8 @@ export default function ApiKeysPage() {
   const fetchKeys = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api.get('/api-keys');
-      setKeys(res.data);
+      const res = await api.get('/api/v1/api-keys');
+      setKeys(Array.isArray(res.data) ? res.data : []);
     } catch {
       // silently handle
     } finally {
@@ -53,7 +53,7 @@ export default function ApiKeysPage() {
         d.setDate(d.getDate() + expiresInDays);
         payload.expires_at = d.toISOString();
       }
-      const res = await api.post('/api-keys', payload);
+      const res = await api.post('/api/v1/api-keys', payload);
       setNewKeyValue(res.data.raw_key);
       setName('');
       setScopes(['read', 'write']);
@@ -68,7 +68,7 @@ export default function ApiKeysPage() {
   const handleRevoke = async (id: string) => {
     if (!confirm('Revoke this API key? This cannot be undone.')) return;
     try {
-      await api.delete(`/api-keys/${id}`);
+      await api.delete(`/api/v1/api-keys/${id}`);
       fetchKeys();
     } catch {
       // silently handle

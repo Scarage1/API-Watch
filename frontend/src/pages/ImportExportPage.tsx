@@ -31,8 +31,8 @@ export default function ImportExportPage() {
   const fetchCollections = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api.get('/collections');
-      setCollections(res.data);
+      const res = await api.get('/api/v1/collections');
+      setCollections(Array.isArray(res.data) ? res.data : []);
     } catch {
       // silently handle
     } finally {
@@ -53,7 +53,7 @@ export default function ImportExportPage() {
       setImportResult(null);
       const formData = new FormData();
       formData.append('file', file);
-      await api.post('/import-export/import/postman', formData, {
+      await api.post('/api/v1/import-export/import/postman', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setImportResult({ success: true, message: `Successfully imported "${file.name}"` });
@@ -69,7 +69,7 @@ export default function ImportExportPage() {
   const handleExport = async (collectionId: string, format: 'postman' | 'openapi') => {
     try {
       setExporting(`${collectionId}-${format}`);
-      const res = await api.get(`/import-export/export/${format}/${collectionId}`);
+      const res = await api.get(`/api/v1/import-export/export/${format}/${collectionId}`);
       const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
