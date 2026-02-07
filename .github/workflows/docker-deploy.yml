@@ -8,9 +8,9 @@
 #   Secrets:
 #     - AZURE_CREDENTIALS    (az ad sp create-for-rbac output)
 #     - JWT_SECRET_KEY        (openssl rand -hex 32)
-#   Variables (optional):
-#     - AZURE_WEBAPP_NAME     (default: apiwatch-shivamkumar)
-#     - AZURE_RESOURCE_GROUP  (default: apiwatch-rg)
+#   Variables (required for Azure deploy):
+#     - AZURE_WEBAPP_NAME     (your Azure App Service name)
+#     - AZURE_RESOURCE_GROUP  (your Azure resource group name)
 # =============================================================
 
 name: Docker Build & Deploy
@@ -22,9 +22,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: scarage1/api-watch
-  AZURE_WEBAPP_NAME: apiwatch-shivamkumar
-  AZURE_RESOURCE_GROUP: apiwatch-rg
+  IMAGE_NAME: ${{ github.repository_owner }}/api-watch
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
 
 permissions:
   contents: read

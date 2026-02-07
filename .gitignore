@@ -62,6 +62,11 @@ frontend/dist/
 .env.local
 .env.*.local
 .env.production
+**/.env.production
+frontend/.env.production
+
+# Backup files
+*.bak
 
 # OS
 .DS_Store

@@ -19,8 +19,8 @@
 
 All PRs must pass the existing test suite:
 
-- Backend: 137 tests via `pytest`
-- Frontend: 41 tests via `vitest`
+- Backend: `pytest`
+- Frontend: 356 tests via `vitest`
 
 Add tests for new features.
 

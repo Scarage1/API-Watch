@@ -2,8 +2,6 @@
 
 A full-stack API debugging, testing, and monitoring toolkit. Execute requests, run test suites, diagnose failures, and track performance — all from a single dashboard.
 
-**Live:** [apiwatch-shivamkumar.azurewebsites.net](https://apiwatch-shivamkumar.azurewebsites.net)
-
 ---
 
 ## Features
@@ -22,9 +20,9 @@ A full-stack API debugging, testing, and monitoring toolkit. Execute requests, r
 |-------|-----------|
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS, Zustand, Recharts |
 | Backend | Python 3.11, FastAPI, Uvicorn |
-| Testing | Vitest + Testing Library (41 tests), Pytest (137 tests) |
-| CI/CD | GitHub Actions → Azure App Service |
-| Hosting | Azure App Service (F1), Central India |
+| Testing | Vitest + Testing Library (356 tests), Pytest |
+| CI/CD | GitHub Actions → Docker → Any cloud provider |
+| Hosting | Docker (self-hosted or any cloud platform) |
 
 ## Quick Start
 
@@ -51,10 +49,10 @@ Backend runs on `http://localhost:8000`, frontend on `http://localhost:5173`.
 ### Run Tests
 
 ```bash
-# Backend (137 tests)
+# Backend
 pytest
 
-# Frontend (41 tests)
+# Frontend (356 tests)
 cd frontend && npm test
 ```
 
@@ -127,9 +125,9 @@ API-Watch/
 
 Every push to `main` triggers the GitHub Actions pipeline:
 
-1. **Test** — 137 backend + 41 frontend tests
-2. **Build** — Compiles frontend with production API URL
-3. **Deploy** — Packages backend + frontend, deploys to Azure
+1. **Test** — Backend + frontend test suites
+2. **Build** — Compiles frontend, builds Docker image, pushes to GHCR
+3. **Deploy** — Deploys container to your configured cloud provider
 4. **Verify** — Hits `/health` to confirm deployment
 
 ## License

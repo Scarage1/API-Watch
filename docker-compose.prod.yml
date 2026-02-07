@@ -14,7 +14,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-}
-    image: ghcr.io/scarage1/api-watch:latest
+    image: ghcr.io/<your-github-username>/api-watch:latest
     container_name: apiwatch-app
     restart: unless-stopped
     ports:

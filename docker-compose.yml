@@ -1,5 +1,8 @@
 version: "3.9"
 
+# ⚠️ LOCAL DEVELOPMENT ONLY — Do NOT use these credentials in production.
+# For production, see docker-compose.prod.yml + .env.production.example
+
 services:
   # ── PostgreSQL ─────────────────────────────────────────────────────
   postgres:
