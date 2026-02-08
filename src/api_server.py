@@ -534,6 +534,13 @@ if frontend_dist:
     if assets_path.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
 
+    def _spa_html_response():
+        """Return index.html with no-cache so the browser always fetches the latest bundle references."""
+        return FileResponse(
+            frontend_dist / "index.html",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"},
+        )
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve React SPA for all non-API routes."""
@@ -548,7 +555,7 @@ if frontend_dist:
                 return FileResponse(file_path)
             raise HTTPException(status_code=404, detail="Not found")
 
-        return FileResponse(frontend_dist / "index.html")
+        return _spa_html_response()
 else:
     @app.get("/")
     async def root():
