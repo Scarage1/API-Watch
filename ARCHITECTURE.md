@@ -8,167 +8,229 @@ System design and component overview for API-Watch.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                        Client                           │
-│                  React SPA (Vite)                        │
-│   ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
-│   │Dashboard │ │TestSuites│ │Analytics │ │ History  │  │
-│   └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘  │
-│        └─────────────┴─────────────┴─────────────┘      │
-│                        Axios                             │
-└──────────────────────────┬──────────────────────────────┘
-                           │ HTTP (JSON)
-┌──────────────────────────▼──────────────────────────────┐
-│                    FastAPI Server                        │
+│                    Browser (SPA)                        │
+│  React 19 · TypeScript · Vite · Tailwind · Zustand     │
 │                                                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐ │
-│  │   Router    │  │Static Files │  │ Webhook Handler │ │
-│  │ /api/*      │  │ / (SPA)     │  │ /webhook/*      │ │
-│  └──────┬──────┘  └─────────────┘  └─────────────────┘ │
-│         │                                               │
-│  ┌──────▼──────┐  ┌─────────────┐  ┌─────────────────┐ │
-│  │   Runner    │  │  Diagnose   │  │    Auth          │ │
-│  │ (executor)  │  │  (analysis) │  │  (credentials)   │ │
-│  └──────┬──────┘  └─────────────┘  └─────────────────┘ │
-│         │                                               │
-│  ┌──────▼──────┐  ┌─────────────┐                       │
-│  │   Retry     │  │   Report    │                       │
-│  │ (backoff)   │  │ (HTML gen)  │                       │
-│  └─────────────┘  └─────────────┘                       │
-└─────────────────────────────────────────────────────────┘
+│  16 Pages · 25 Components · 8 Stores · 10 Lib Modules  │
+└──────────────────────┬──────────────────────────────────┘
+                       │  HTTP / WebSocket
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│                 FastAPI Backend                          │
+│  Python 3.11 · Uvicorn · SQLAlchemy 2.0 · Pydantic v2  │
+│                                                         │
+│  26 Modules · 20 Route Files · JWT Auth · RBAC          │
+│                                                         │
+│  ┌─────────────┐  ┌────────────┐  ┌──────────────────┐ │
+│  │ Rate Limiter│  │ Secret     │  │ SSRF Protection  │ │
+│  │ (sliding    │  │ Scanner    │  │ (private IP      │ │
+│  │  window)    │  │            │  │  blocking)       │ │
+│  └─────────────┘  └────────────┘  └──────────────────┘ │
+└──────┬──────────────────┬───────────────────┬───────────┘
+       │                  │                   │
+       ▼                  ▼                   ▼
+┌──────────────┐  ┌──────────────┐   ┌──────────────────┐
+│  PostgreSQL  │  │    Redis     │   │  External APIs   │
+│  (SQLite in  │  │  (in-memory  │   │  (user targets)  │
+│   dev mode)  │  │   fallback)  │   │                  │
+└──────────────┘  └──────────────┘   └──────────────────┘
 ```
 
-## Components
+---
 
-### Frontend
+## Frontend Architecture
 
-| Component | File | Responsibility |
-|-----------|------|---------------|
-| **Dashboard** | `pages/Dashboard.tsx` | Stats overview, cumulative success rate chart |
-| **Single Request** | `pages/SingleRequest.tsx` | Execute individual API calls |
-| **Test Suites** | `pages/TestSuites.tsx` | CRUD + execute multi-test suites |
-| **Analytics** | `pages/Analytics.tsx` | P50/P95/P99 latency, histograms, trends |
-| **History** | `pages/History.tsx` | Execution log with method/status/search filters |
-| **Settings** | `pages/Settings.tsx` | User preferences (timeout, retries, theme) |
-| **Store** | `store/useAppStore.ts` | Zustand store, persisted to localStorage |
-| **API Client** | `lib/api.ts` | Axios instance with base URL config |
+### Pages (16)
 
-**State Management:** Zustand with `persist` middleware. All test history, suites, and settings survive page reloads. History capped at 200 entries.
+| Page | Purpose |
+|------|---------|
+| `Dashboard` | Overview — recent activity, success rates, trends |
+| `SingleRequest` | HTTP client with tabbed request/response |
+| `GraphQLClient` | GraphQL query editor with introspection |
+| `WebSocketClient` | WebSocket connection and messaging |
+| `SSEClient` | Server-Sent Events streaming |
+| `TestSuites` | Multi-step API test runner |
+| `History` | Searchable request execution log |
+| `Analytics` | P50/P95/P99 latency, status distribution |
+| `MonitorDashboard` | Scheduled health check dashboard |
+| `MockServer` | Mock endpoint management |
+| `Documentation` | Auto-generated API docs |
+| `ImportExportPage` | Postman/OpenAPI import and export |
+| `Settings` | User preferences |
+| `TeamSettings` | Workspace member and role management |
+| `ApiKeysPage` | API key CRUD |
+| `ActivityFeed` | Workspace activity timeline |
 
-**Routing:** React Router v7 with sidebar navigation. Layout wraps all pages with Header + Sidebar.
+### State Management
 
-### Backend
+Zustand stores (8) manage all client-side state:
 
-| Module | File | Responsibility |
-|--------|------|---------------|
-| **API Server** | `api_server.py` | FastAPI app, CORS, routes, static file serving |
-| **Runner** | `runner.py` | Executes HTTP requests via `requests` library |
-| **Auth** | `auth.py` | Handles Bearer, API Key, and Basic auth |
-| **Retry** | `retry.py` | Exponential backoff with jitter, configurable max retries |
-| **Diagnose** | `diagnose.py` | Maps status codes + errors to human-readable diagnosis |
-| **Report** | `report.py` | Generates HTML test reports via Jinja2 |
-| **Utils** | `utils.py` | Env loading, formatting, JSON parsing, timestamps |
-| **CLI** | `main.py` | Command-line interface (Rich-powered output) |
+| Store | Responsibility |
+|-------|---------------|
+| `requestStore` | Active request tabs, loading states, responses |
+| `historyStore` | Request history with search/filter |
+| `environmentStore` | Environment variables and active environment |
+| `collectionStore` | Saved request collections |
+| `workspaceStore` | Active workspace and membership |
+| `authStore` | Auth tokens and user info |
+| `themeStore` | Dark/light mode preference |
+| `monitorStore` | Monitor configurations and results |
 
-## Data Flow
+### Key Libraries
 
-### Single Request
+| Module | Purpose |
+|--------|---------|
+| `api.ts` | Axios HTTP client with auth interceptors |
+| `scriptEngine.ts` | `pm.*` scripting runtime (test, expect, env) |
+| `codeGenerator.ts` | Multi-language code generation |
+| `curlParser.ts` | cURL command import parser |
+| `interpolate.ts` | `{{variable}}` template interpolation |
+| `schemaValidator.ts` | JSON Schema response validation |
+| `importExport.ts` | Postman/OpenAPI format handlers |
+
+---
+
+## Backend Architecture
+
+### Core Modules
+
+| Module | Purpose |
+|--------|---------|
+| `api_server.py` | FastAPI app, middleware, SPA catch-all |
+| `config.py` | Environment-based configuration |
+| `models.py` | SQLAlchemy ORM models (15+ tables) |
+| `database.py` | Async engine, session factory |
+| `runner.py` | HTTP request execution with timing |
+| `auth.py` | Bearer, API Key, Basic auth handlers |
+| `jwt_auth.py` | JWT token creation, validation, refresh |
+| `rbac.py` | Role-based access control (admin/editor/viewer) |
+| `cache.py` | Redis wrapper with in-memory fallback |
+| `rate_limit.py` | Sliding-window rate limiter |
+| `retry.py` | Exponential backoff with jitter |
+| `diagnose.py` | Failure pattern matching and suggestions |
+| `monitor_executor.py` | Scheduled API monitor runner |
+| `notifier.py` | Email/webhook/Slack notifications |
+| `secret_scanner.py` | Credential leak detection in requests |
+| `report.py` | HTML test report generator |
+| `ssrf_protection.py` | Private IP and internal network blocking |
+
+### Route Modules (20)
+
+All routes are organized under `src/routes/` and registered to the main app:
+
+| Route Module | Prefix | Description |
+|-------------|--------|-------------|
+| `auth_routes` | `/api/v1/auth` | Login, register, token refresh |
+| `workspace_routes` | `/api/v1/workspaces` | Workspace CRUD, members |
+| `collections_routes` | `/api/v1/collections` | Collection CRUD, folders |
+| `environments_routes` | `/api/v1/environments` | Environment CRUD, variables |
+| `history_routes` | `/api/v1/history` | Request history queries |
+| `monitor_routes` | `/api/v1/monitors` | Monitor CRUD, results |
+| `mock_routes` | `/api/v1/mocks` | Mock endpoint management |
+| `api_key_routes` | `/api/v1/api-keys` | API key generation |
+| `import_export_routes` | `/api/v1/import-export` | Postman/OpenAPI conversion |
+| `activity_routes` | `/api/v1/activity` | Workspace activity log |
+| `notification_routes` | `/api/v1/notifications` | Notification preferences |
+| `execute_routes` | `/api` | Legacy execute endpoints |
+| `webhook_routes` | `/webhook` | Incoming webhook capture |
+
+### Security Layers
 
 ```
-User fills form → POST /api/execute-request
-                       │
-                 ┌─────▼─────┐
-                 │  Runner    │──→ requests.request()
-                 └─────┬─────┘
-                       │ RequestResult
-                 ┌─────▼─────┐
-                 │  Diagnose  │  (if error)
-                 └─────┬─────┘
-                       │
-                  JSON Response → Frontend renders result
-                                → Store appends to history
+Request → Rate Limiter → Body Size Check → Auth (JWT/API Key)
+       → SSRF Protection → Secret Scanner → Execute
 ```
 
-### Test Suite
+1. **Rate Limiting** — Sliding-window per IP, configurable limits.
+2. **Body Size Limit** — Rejects payloads over 10 MB.
+3. **Authentication** — JWT tokens or API keys per workspace.
+4. **RBAC** — Admin/Editor/Viewer roles on workspace resources.
+5. **SSRF Protection** — Blocks requests to private IPs (10.x, 172.16.x, 192.168.x, localhost).
+6. **Secret Scanning** — Warns when requests contain exposed credentials.
+7. **Input Validation** — Pydantic v2 models validate all request bodies.
+
+---
+
+## Data Flow — Request Execution
 
 ```
-User creates suite → POST /api/execute-suite
-                           │
-                    ┌──────▼──────┐
-                    │  For each   │
-                    │  test case  │
-                    └──────┬──────┘
-                           │
-                 ┌─────────▼─────────┐
-                 │  Runner.execute() │──→ Auth headers injected
-                 │  + Retry logic    │──→ Exponential backoff
-                 └─────────┬─────────┘
-                           │ List[RequestResult]
-                    ┌──────▼──────┐
-                    │  Aggregate  │
-                    │  results    │
-                    └──────┬──────┘
-                           │
-                    JSON Response → Frontend shows pass/fail per test
-                                 → Batch added to history
+┌────────┐     ┌────────────┐     ┌────────────┐     ┌──────────┐
+│ Client │────▶│ Pre-Script │────▶│  Runner    │────▶│ External │
+│ (SPA)  │     │ Engine     │     │ (httpx)    │     │ API      │
+└────────┘     └────────────┘     └────────────┘     └──────────┘
+                                        │
+                                        ▼
+                                  ┌────────────┐
+                                  │ Post-Script│
+                                  │ (pm.test)  │
+                                  └─────┬──────┘
+                                        │
+                              ┌─────────┼──────────┐
+                              ▼         ▼          ▼
+                        ┌──────────┐ ┌───────┐ ┌────────┐
+                        │ History  │ │ Cache │ │ Report │
+                        │ (DB)     │ │       │ │ (HTML) │
+                        └──────────┘ └───────┘ └────────┘
 ```
+
+---
 
 ## Retry Strategy
 
-```
-Attempt 1 → fail (5xx / timeout)
-  wait: base_delay * 2^0 + jitter
-Attempt 2 → fail
-  wait: base_delay * 2^1 + jitter
-Attempt 3 → fail
-  wait: base_delay * 2^2 + jitter  (capped at max_delay)
-Attempt N → give up after max_retries
-```
+When a request fails, the retry engine applies:
 
-- **Retryable:** 500, 502, 503, 504, timeouts, connection errors
-- **Not retryable:** 4xx client errors (except 429 rate limit)
+| Attempt | Delay | Strategy |
+|---------|-------|----------|
+| 1 | 1s | Base delay |
+| 2 | 2s | Exponential (2^1) |
+| 3 | 4s | Exponential (2^2) |
+| N | min(2^(N-1), 30s) | Capped at 30 seconds |
 
-## Diagnosis Engine
+All delays include random jitter (±25%) to avoid thundering herd.
 
-Maps failure patterns to actionable advice:
-
-| Condition | Severity | Suggestion |
-|-----------|----------|-----------|
-| 401 Unauthorized | High | Check auth credentials |
-| 403 Forbidden | High | Verify permissions/API scopes |
-| 404 Not Found | Medium | Verify endpoint URL |
-| 429 Rate Limited | Medium | Reduce request frequency |
-| 500 Server Error | High | Server-side issue, check logs |
-| 502/503/504 | High | Service unavailable, retry later |
-| Timeout | Medium | Increase timeout or check network |
-| Connection Error | High | Verify URL is reachable |
+---
 
 ## Deployment Architecture
 
 ```
-GitHub (main branch)
-       │ push
-       ▼
-GitHub Actions
-  ├── pytest (137 tests)
-  ├── vitest (41 tests)
-  ├── vite build (frontend → dist/)
-  ├── package (src/ + dist/ → zip)
-  └── az webapp deploy
-             │
-             ▼
-Azure App Service (F1 Free)
-  ├── startup.sh → gunicorn
-  ├── /api/*     → FastAPI routes
-  ├── /health    → health check
-  ├── /webhook   → webhook receiver
-  └── /*         → React SPA (index.html)
+┌──────────────┐     ┌──────────────┐     ┌──────────────────┐
+│ GitHub Push  │────▶│ GitHub       │────▶│ GHCR             │
+│ (main)       │     │ Actions CI   │     │ (Container       │
+│              │     │              │     │  Registry)        │
+└──────────────┘     └──────────────┘     └────────┬─────────┘
+                                                    │
+                                                    ▼
+                                          ┌──────────────────┐
+                                          │ Azure App Service│
+                                          │ (Docker container│
+                                          │  + PostgreSQL    │
+                                          │  + Redis)        │
+                                          └──────────────────┘
 ```
 
-**Single deployment unit:** Backend serves the frontend as static files. No separate frontend hosting needed. The FastAPI server handles API routes first, then falls back to serving `index.html` for all other paths (SPA routing).
+Multi-stage Docker build:
+1. **Stage 1** — Node.js: install deps, build frontend (`npm run build`)
+2. **Stage 2** — Python: install deps, copy backend + built frontend, run Uvicorn
 
-## Security
+---
 
-- CORS enabled (configurable origins)
-- No secrets stored in code — all via environment variables
-- Auth credentials handled per-request, never persisted server-side
-- Webhook payloads logged to isolated directory
+## Database Schema (Key Tables)
+
+| Table | Purpose |
+|-------|---------|
+| `users` | User accounts, hashed passwords |
+| `workspaces` | Team workspaces |
+| `workspace_members` | User-workspace membership with roles |
+| `collections` | Request collections |
+| `collection_items` | Individual requests within collections |
+| `environments` | Named environments (dev, staging, prod) |
+| `environment_variables` | Key-value pairs per environment |
+| `request_history` | Executed request log |
+| `monitors` | Scheduled health check configs |
+| `monitor_results` | Monitor execution results |
+| `mock_endpoints` | Mock server endpoint configs |
+| `api_keys` | Workspace API keys |
+| `activity_log` | Workspace activity feed |
+| `notifications` | Notification channel configs |
+
+Migrations are managed with **Alembic** (`alembic/`).
