@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -195,7 +195,69 @@
   .animate-in {
     @apply animate-fade-in;
   }
+
+  /* Page enter transition — wrap page content with this */
+  .page-enter {
+    @apply animate-slide-up;
+  }
+
+  /* Gradient mesh background used in landing / 404 / empty states */
+  .gradient-mesh {
+    background-image:
+      radial-gradient(at 40% 20%, hsla(240, 87%, 68%, 0.12) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, hsla(173, 85%, 47%, 0.08) 0px, transparent 50%),
+      radial-gradient(at 0% 50%, hsla(240, 87%, 68%, 0.06) 0px, transparent 50%),
+      radial-gradient(at 80% 50%, hsla(340, 85%, 65%, 0.05) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, hsla(173, 85%, 47%, 0.06) 0px, transparent 50%);
+  }
+
+  /* Focus ring — accessible, pretty */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-surface-900;
+  }
+
+  /* Status dot — pulsing indicator */
+  .status-dot-green  { @apply w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]; }
+  .status-dot-red    { @apply w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]; }
+  .status-dot-amber  { @apply w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]; }
+
+  /* Tooltip base */
+  .tooltip {
+    @apply relative;
+  }
+  .tooltip::after {
+    content: attr(data-tooltip);
+    @apply absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1;
+    @apply text-xs font-medium text-white bg-surface-800 dark:bg-surface-700 rounded-lg;
+    @apply whitespace-nowrap pointer-events-none opacity-0 transition-opacity duration-150;
+    @apply shadow-lg;
+  }
+  .tooltip:hover::after {
+    @apply opacity-100;
+  }
+
+  /* Gradient text utility */
+  .gradient-text {
+    @apply bg-gradient-to-br from-brand-600 via-brand-500 to-accent-500 bg-clip-text text-transparent;
+  }
+  .dark .gradient-text {
+    @apply from-brand-400 via-brand-300 to-accent-400;
+  }
 }
+
+/* ── Shimmer keyframe (for after:animate-shimmer in Skeleton.tsx) ─────────── */
+@keyframes shimmerMove {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Applied via Tailwind's `animate-shimmer` — defined in tailwind.config.js */
+/* This raw rule ensures the `after:` pseudo-element version also works */
+[class*='after:animate-shimmer']::after {
+  background-size: 200% 100%;
+  animation: shimmerMove 1.8s linear infinite;
+}
+
 
 /* Response syntax highlighting */
 .response-highlight {

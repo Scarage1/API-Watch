@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # ── General ──────────────────────────────────────────────────────
     app_name: str = "API-Watch"
-    app_version: str = "2.1.0"
+    app_version: str = "3.0.0"
     debug: bool = False
     testing: bool = False
     log_level: str = "INFO"
@@ -70,6 +70,15 @@ class Settings(BaseSettings):
     storage_root: str = "data/storage"
     azure_blob_connection_string: str = ""
     azure_blob_container: str = "apiwatch"
+
+    # ── AI Engine ─────────────────────────────────────────────────
+    ai_provider: str = "ollama"  # "ollama" | "openai" | "anthropic"
+    ai_model: str = ""  # empty → provider default
+    ai_base_url: str = ""  # empty → provider default
+    ai_api_key: str = ""  # required for cloud providers
+    ai_temperature: float = 0.3
+    ai_max_tokens: int = 2048
+    ai_timeout: float = 60.0
 
     # ── Webhook ──────────────────────────────────────────────────────
     webhook_log_dir: str = "logs/webhooks"

@@ -6,7 +6,6 @@ legacy endpoints, webhook receiver, and SPA static file serving.
 """
 import os
 import json
-import re
 import ipaddress
 from pathlib import Path
 from datetime import datetime, timezone
@@ -37,10 +36,16 @@ from src.storage import get_storage, close_storage
 from src.scheduler import start_scheduler, stop_scheduler
 from src.telemetry import telemetry_middleware, reset_telemetry
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Setup structured logging
+from src.logging_config import configure_logging, get_logger
 
+_env = os.getenv("ENVIRONMENT", "production")
+configure_logging(environment=_env, log_level=os.getenv("LOG_LEVEL", "INFO"))
+logger = get_logger(__name__)
+
+
+# Global API runner singleton (initialized in lifespan)
+_global_runner: "APIRunner | None" = None
 
 # --- Lifespan ---
 @asynccontextmanager
@@ -59,6 +64,15 @@ async def lifespan(app: FastAPI):
     storage = get_storage()
     logger.info("Cache & storage initialized.")
 
+    # Create global API runner with shared connection pool
+    global _global_runner
+    _global_runner = APIRunner(
+        auth_handler=None,
+        retry_config=RetryConfig(max_retries=3, initial_delay=1.0),
+        logger=logger,
+    )
+    logger.info("Global API runner initialized (connection pool ready).")
+
     # Start the background monitor scheduler
     import asyncio
     scheduler_task = asyncio.create_task(start_scheduler())
@@ -75,6 +89,9 @@ async def lifespan(app: FastAPI):
         pass
     await close_cache()
     await close_storage()
+    if _global_runner:
+        await _global_runner.close_async()
+        logger.info("Global API runner connection pool closed.")
     await close_db()
 
 
@@ -109,6 +126,19 @@ app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
 
 # --- Telemetry middleware ---
 app.middleware("http")(telemetry_middleware)
+
+# --- Prometheus metrics ---
+from src.metrics import MetricsMiddleware, router as metrics_router
+app.add_middleware(MetricsMiddleware)
+app.include_router(metrics_router)
+
+# --- AI Engine ---
+from src.ai.routes import router as ai_router
+app.include_router(ai_router)
+
+# --- Enterprise (SSO, Audit, Compliance, Collaboration) ---
+from src.enterprise.routes import router as enterprise_router
+app.include_router(enterprise_router)
 
 # --- Global exception handler ---
 @app.exception_handler(Exception)
@@ -215,63 +245,8 @@ class TestSuiteInput(BaseModel):
     tests: List[TestCaseInput]
 
 
-# --- Variable interpolation ---
-
-import re
-import uuid as _uuid
-import time as _time
-import random as _random
-
-_VAR_PATTERN = re.compile(r'\{\{(\$?[A-Za-z0-9_.\-]+)\}\}')
-
-_DYNAMIC_GENERATORS = {
-    '$randomUUID': lambda: str(_uuid.uuid4()),
-    '$timestamp': lambda: str(int(_time.time())),
-    '$isoTimestamp': lambda: datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
-    '$randomInt': lambda: str(_random.randint(0, 9999)),
-    '$randomEmail': lambda: f'user{_random.randint(0,99999)}@test.example.com',
-    '$randomString': lambda: _uuid.uuid4().hex[:8],
-    '$randomBoolean': lambda: str(_random.choice([True, False])).lower(),
-}
-
-
-def interpolate_string(text: str, variables: Dict[str, str]) -> str:
-    """Replace {{VAR}} placeholders in a string with variable values."""
-    if not text or '{{' not in text:
-        return text
-    def replacer(m):
-        name = m.group(1)
-        if name in variables:
-            return variables[name]
-        gen = _DYNAMIC_GENERATORS.get(name)
-        if gen:
-            return gen()
-        return m.group(0)  # leave unresolved
-    return _VAR_PATTERN.sub(replacer, text)
-
-
-def interpolate_dict(d: Dict[str, str], variables: Dict[str, str]) -> Dict[str, str]:
-    """Interpolate all keys and values in a dict."""
-    return {
-        interpolate_string(k, variables): interpolate_string(v, variables)
-        for k, v in d.items()
-    }
-
-
-def interpolate_body(body: Any, variables: Dict[str, str]) -> Any:
-    """Interpolate variable placeholders in a request body."""
-    if body is None:
-        return None
-    if isinstance(body, str):
-        return interpolate_string(body, variables)
-    if isinstance(body, dict):
-        return {
-            interpolate_string(str(k), variables): (
-                interpolate_string(v, variables) if isinstance(v, str) else v
-            )
-            for k, v in body.items()
-        }
-    return body
+# --- Variable interpolation (extracted to src/interpolation.py) ---
+from src.interpolation import interpolate_string, interpolate_dict, interpolate_body
 
 
 # --- Core endpoints ---
@@ -304,6 +279,9 @@ async def execute_single_request(
     user = Depends(get_current_user),
 ):
     """Execute a single API request (async via httpx)."""
+    import time as _time
+    from src.metrics import metrics as _metrics
+    _exec_start = _time.perf_counter()
     try:
         # Apply environment variable interpolation if provided
         url = request_input.url
@@ -321,9 +299,6 @@ async def execute_single_request(
         # SSRF protection: validate target URL
         _validate_url(url)
 
-        retry_config = RetryConfig(max_retries=3, initial_delay=1.0)
-        runner = APIRunner(auth_handler=None, retry_config=retry_config, logger=logger)
-
         config = RequestConfig(
             method=request_input.method,
             url=url,
@@ -333,7 +308,13 @@ async def execute_single_request(
             timeout=request_input.timeout,
         )
 
-        result = await runner.execute_async(config)
+        result = await _global_runner.execute_async(config)
+
+        # Record execution metrics
+        _metrics.record_api_execution(
+            duration=_time.perf_counter() - _exec_start,
+            success=result.success,
+        )
 
         # Save to history (user is always authenticated)
         history_entry = RequestHistory(
@@ -360,6 +341,10 @@ async def execute_single_request(
     except HTTPException:
         raise
     except Exception as e:
+        _metrics.record_api_execution(
+            duration=_time.perf_counter() - _exec_start,
+            success=False,
+        )
         logger.exception("Error executing request")
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -8,6 +8,8 @@ import OnboardingModal from './components/OnboardingModal';
 import { useAppStore } from './store/useAppStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import LoadingSpinner from './components/LoadingSpinner';
+import PerformancePanel from './components/PerformancePanel';
+import { migrateFromLocalStorage } from './lib/db';
 
 // ── Lazy-loaded pages ────────────────────────────────────────────────────────
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -26,6 +28,7 @@ const ActivityFeed = lazy(() => import('./pages/ActivityFeed'));
 const MonitorDashboard = lazy(() => import('./pages/MonitorDashboard'));
 const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'));
 const ImportExportPage = lazy(() => import('./pages/ImportExportPage'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 function App() {
   const { darkMode } = useAppStore();
@@ -48,6 +51,17 @@ function App() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Migrate localStorage data to IndexedDB on first load
+  useEffect(() => {
+    migrateFromLocalStorage()
+      .then(({ migrated }) => {
+        if (migrated > 0) {
+          console.log(`[idb] Migrated ${migrated} history entries from localStorage`);
+        }
+      })
+      .catch((err) => console.warn('[idb] Migration failed:', err));
   }, []);
 
   return (
@@ -73,12 +87,15 @@ function App() {
             <Route path="import-export" element={<ErrorBoundary><ImportExportPage /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
           </Route>
+          {/* Catch-all — always last */}
+          <Route path="*" element={<ErrorBoundary><NotFound /></ErrorBoundary>} />
         </Routes>
       </Suspense>
       </ErrorBoundary>
       <ToastContainer />
       <CommandPalette />
       <OnboardingModal />
+      {import.meta.env.DEV && <PerformancePanel />}
     </BrowserRouter>
   );
 }

@@ -63,6 +63,7 @@ frontend/dist/
 .env.*.local
 .env.production
 **/.env.production
+frontend/.env
 frontend/.env.production
 
 # Backup files

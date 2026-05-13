@@ -12,9 +12,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.24",
     "axios": "^1.13.4",
     "clsx": "^2.1.1",
     "dompurify": "^3.3.1",
+    "idb": "^8.0.3",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

@@ -398,13 +398,22 @@ class APIRunner:
             return {}
         bt = (config.body_type or "json").lower()
         if bt == "json":
-            import json as _json
-            if isinstance(config.body, str):
-                try:
-                    return {"json": _json.loads(config.body)}
-                except (ValueError, TypeError):
-                    return {"data": config.body}
-            return {"json": config.body}
+            try:
+                import orjson
+                if isinstance(config.body, str):
+                    try:
+                        return {"json": orjson.loads(config.body)}
+                    except (orjson.JSONDecodeError, TypeError):
+                        return {"data": config.body}
+                return {"json": config.body}
+            except ImportError:
+                import json as _json
+                if isinstance(config.body, str):
+                    try:
+                        return {"json": _json.loads(config.body)}
+                    except (ValueError, TypeError):
+                        return {"data": config.body}
+                return {"json": config.body}
         if bt in ("form-urlencoded", "urlencoded"):
             if isinstance(config.body, dict):
                 return {"data": config.body}
@@ -423,13 +432,22 @@ class APIRunner:
             return {}
         bt = (config.body_type or "json").lower()
         if bt == "json":
-            import json as _json
-            if isinstance(config.body, str):
-                try:
-                    return {"json": _json.loads(config.body)}
-                except (ValueError, TypeError):
-                    return {"content": config.body}
-            return {"json": config.body}
+            try:
+                import orjson
+                if isinstance(config.body, str):
+                    try:
+                        return {"json": orjson.loads(config.body)}
+                    except (orjson.JSONDecodeError, TypeError):
+                        return {"content": config.body}
+                return {"json": config.body}
+            except ImportError:
+                import json as _json
+                if isinstance(config.body, str):
+                    try:
+                        return {"json": _json.loads(config.body)}
+                    except (ValueError, TypeError):
+                        return {"content": config.body}
+                return {"json": config.body}
         if bt in ("form-urlencoded", "urlencoded"):
             if isinstance(config.body, dict):
                 return {"data": config.body}
@@ -443,16 +461,17 @@ class APIRunner:
     # ── Connection pool management ─────────────────────────────────────
 
     def _get_async_client(self) -> "httpx.AsyncClient":
-        """Lazily create a persistent httpx.AsyncClient with connection pooling."""
+        """Lazily create a persistent httpx.AsyncClient with connection pooling and HTTP/2."""
         if self._async_client is None or self._async_client.is_closed:
             pool_limits = httpx.Limits(
-                max_connections=100,
-                max_keepalive_connections=20,
-                keepalive_expiry=30,
+                max_connections=200,
+                max_keepalive_connections=40,
+                keepalive_expiry=60,
             )
             self._async_client = httpx.AsyncClient(
                 limits=pool_limits,
-                http2=False,  # Stick to HTTP/1.1 for broad compatibility
+                http2=True,  # Enable HTTP/2 multiplexing for supporting servers
+                timeout=httpx.Timeout(30.0, connect=10.0),
             )
         return self._async_client
 
