@@ -4,11 +4,18 @@ AI Engine — Central orchestrator for API-Watch AI features.
 Manages provider lifecycle, routes requests to agents,
 and provides a clean API for the rest of the application.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncIterator, Dict, Optional, Any
+from collections.abc import AsyncIterator
+from typing import Any
 
+from src.ai.agents import (
+    DebugAssistantAgent,
+    RequestBuilderAgent,
+    TestGeneratorAgent,
+)
 from src.ai.providers import (
     AIConfig,
     AIProvider,
@@ -16,11 +23,6 @@ from src.ai.providers import (
     BaseAIProvider,
     create_provider,
     get_default_config,
-)
-from src.ai.agents import (
-    TestGeneratorAgent,
-    DebugAssistantAgent,
-    RequestBuilderAgent,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,10 +48,10 @@ class AIEngine:
 
     def __init__(self):
         self._config: AIConfig = get_default_config()
-        self._provider: Optional[BaseAIProvider] = None
-        self._test_gen: Optional[TestGeneratorAgent] = None
-        self._debug: Optional[DebugAssistantAgent] = None
-        self._builder: Optional[RequestBuilderAgent] = None
+        self._provider: BaseAIProvider | None = None
+        self._test_gen: TestGeneratorAgent | None = None
+        self._debug: DebugAssistantAgent | None = None
+        self._builder: RequestBuilderAgent | None = None
 
     def configure(self, config: AIConfig) -> None:
         """Update the AI configuration and reinitialize the provider."""
@@ -60,7 +62,8 @@ class AIEngine:
         self._builder = RequestBuilderAgent(self._provider)
         logger.info(
             "AI engine configured: provider=%s model=%s",
-            config.provider.value, config.model,
+            config.provider.value,
+            config.model,
         )
 
     def _ensure_initialized(self) -> None:
@@ -83,10 +86,10 @@ class AIEngine:
         self._ensure_initialized()
         return await self._provider.is_available()  # type: ignore
 
-    async def get_status(self) -> Dict[str, Any]:
+    async def get_status(self) -> dict[str, Any]:
         """Get the current AI engine status."""
         available = await self.is_available()
-        status: Dict[str, Any] = {
+        status: dict[str, Any] = {
             "enabled": True,
             "available": available,
             "provider": self._config.provider.value,
@@ -97,6 +100,7 @@ class AIEngine:
         # List models for Ollama
         if self._config.provider == AIProvider.OLLAMA and available:
             from src.ai.providers import OllamaProvider
+
             if isinstance(self._provider, OllamaProvider):
                 status["models"] = await self._provider.list_models()
 
@@ -108,8 +112,8 @@ class AIEngine:
         method: str,
         url: str,
         status_code: int,
-        response_body: Optional[str] = None,
-        response_headers: Optional[Dict[str, str]] = None,
+        response_body: str | None = None,
+        response_headers: dict[str, str] | None = None,
         response_time: float = 0.0,
     ) -> AIResponse:
         """Generate test assertions for an API response."""
@@ -128,8 +132,8 @@ class AIEngine:
         method: str,
         url: str,
         status_code: int,
-        response_body: Optional[str] = None,
-        response_headers: Optional[Dict[str, str]] = None,
+        response_body: str | None = None,
+        response_headers: dict[str, str] | None = None,
         response_time: float = 0.0,
     ) -> AsyncIterator[str]:
         """Stream test assertions for an API response."""
@@ -149,13 +153,13 @@ class AIEngine:
         self,
         method: str,
         url: str,
-        status_code: Optional[int] = None,
-        request_headers: Optional[Dict[str, str]] = None,
-        request_body: Optional[str] = None,
-        response_body: Optional[str] = None,
-        response_headers: Optional[Dict[str, str]] = None,
-        error: Optional[str] = None,
-        error_type: Optional[str] = None,
+        status_code: int | None = None,
+        request_headers: dict[str, str] | None = None,
+        request_body: str | None = None,
+        response_body: str | None = None,
+        response_headers: dict[str, str] | None = None,
+        error: str | None = None,
+        error_type: str | None = None,
     ) -> AIResponse:
         """Analyze a failed request and suggest fixes."""
         self._ensure_initialized()
@@ -175,13 +179,13 @@ class AIEngine:
         self,
         method: str,
         url: str,
-        status_code: Optional[int] = None,
-        request_headers: Optional[Dict[str, str]] = None,
-        request_body: Optional[str] = None,
-        response_body: Optional[str] = None,
-        response_headers: Optional[Dict[str, str]] = None,
-        error: Optional[str] = None,
-        error_type: Optional[str] = None,
+        status_code: int | None = None,
+        request_headers: dict[str, str] | None = None,
+        request_body: str | None = None,
+        response_body: str | None = None,
+        response_headers: dict[str, str] | None = None,
+        error: str | None = None,
+        error_type: str | None = None,
     ) -> AsyncIterator[str]:
         """Stream debug analysis."""
         self._ensure_initialized()
@@ -210,14 +214,14 @@ class AIEngine:
         async for token in self._builder.build_stream(description):  # type: ignore
             yield token
 
-    def parse_built_request(self, content: str) -> Optional[Dict[str, Any]]:
+    def parse_built_request(self, content: str) -> dict[str, Any] | None:
         """Parse a request builder AI response into a config dict."""
         self._ensure_initialized()
         return self._builder.parse_response(content)  # type: ignore
 
 
 # ── Global singleton ──────────────────────────────────────────
-_engine: Optional[AIEngine] = None
+_engine: AIEngine | None = None
 
 
 def get_ai_engine() -> AIEngine:

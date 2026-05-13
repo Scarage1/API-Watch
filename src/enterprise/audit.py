@@ -13,6 +13,7 @@ The audit system builds on the existing AuditLog model and adds:
   - Policy evaluation engine
   - Export in CSV/JSON/PDF formats
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -20,35 +21,35 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
-from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger("apiwatch.enterprise.audit")
 
 
 # ── Compliance Frameworks ─────────────────────────────────────
-class ComplianceFramework(str, Enum):
+class ComplianceFramework(StrEnum):
     SOC2 = "soc2"
     GDPR = "gdpr"
     HIPAA = "hipaa"
     ISO27001 = "iso27001"
 
 
-class ComplianceStatus(str, Enum):
+class ComplianceStatus(StrEnum):
     COMPLIANT = "compliant"
     PARTIAL = "partial"
     NON_COMPLIANT = "non_compliant"
     NOT_APPLICABLE = "not_applicable"
 
 
-class AuditSeverity(str, Enum):
+class AuditSeverity(StrEnum):
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
 
 
-class RetentionPolicy(str, Enum):
+class RetentionPolicy(StrEnum):
     DAYS_30 = "30d"
     DAYS_90 = "90d"
     DAYS_365 = "365d"
@@ -59,8 +60,9 @@ class RetentionPolicy(str, Enum):
 @dataclass
 class AuditEvent:
     """A structured audit event."""
-    category: str         # auth, security, admin, data, system
-    action: str           # login, api_key_created, collection_deleted, etc.
+
+    category: str  # auth, security, admin, data, system
+    action: str  # login, api_key_created, collection_deleted, etc.
     severity: AuditSeverity = AuditSeverity.INFO
     resource_type: str = ""
     resource_id: str = ""
@@ -69,7 +71,7 @@ class AuditEvent:
     ip_address: str = ""
     user_agent: str = ""
     organization_id: str = ""
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
     # Hash chain for tamper evidence
@@ -78,19 +80,22 @@ class AuditEvent:
 
     def compute_hash(self) -> str:
         """Compute SHA-256 hash of this event for tamper detection."""
-        payload = json.dumps({
-            "category": self.category,
-            "action": self.action,
-            "severity": self.severity.value,
-            "resource_type": self.resource_type,
-            "resource_id": self.resource_id,
-            "user_id": self.user_id,
-            "timestamp": self.timestamp,
-            "previous_hash": self.previous_hash,
-        }, sort_keys=True)
+        payload = json.dumps(
+            {
+                "category": self.category,
+                "action": self.action,
+                "severity": self.severity.value,
+                "resource_type": self.resource_type,
+                "resource_id": self.resource_id,
+                "user_id": self.user_id,
+                "timestamp": self.timestamp,
+                "previous_hash": self.previous_hash,
+            },
+            sort_keys=True,
+        )
         return hashlib.sha256(payload.encode()).hexdigest()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "category": self.category,
             "action": self.action,
@@ -111,6 +116,7 @@ class AuditEvent:
 @dataclass
 class ComplianceControl:
     """A single compliance control check."""
+
     id: str
     framework: ComplianceFramework
     name: str
@@ -120,7 +126,7 @@ class ComplianceControl:
     evidence: str = ""
     recommendation: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "framework": self.framework.value,
@@ -137,13 +143,14 @@ class ComplianceControl:
 @dataclass
 class ComplianceReport:
     """A full compliance report for an organization."""
+
     organization_id: str
     framework: ComplianceFramework
     generated_at: str = ""
-    controls: List[ComplianceControl] = field(default_factory=list)
+    controls: list[ComplianceControl] = field(default_factory=list)
 
     @property
-    def summary(self) -> Dict[str, int]:
+    def summary(self) -> dict[str, int]:
         counts = {s.value: 0 for s in ComplianceStatus}
         for c in self.controls:
             counts[c.status.value] += 1
@@ -159,7 +166,7 @@ class ComplianceReport:
         partial = sum(1 for c in applicable if c.status == ComplianceStatus.PARTIAL)
         return round(((compliant + partial * 0.5) / len(applicable)) * 100, 1)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "organization_id": self.organization_id,
             "framework": self.framework.value,
@@ -182,7 +189,7 @@ class AuditService:
     """
 
     def __init__(self):
-        self._events: List[AuditEvent] = []
+        self._events: list[AuditEvent] = []
         self._last_hash: str = "genesis"
         self._retention_policy: RetentionPolicy = RetentionPolicy.DAYS_90
 
@@ -208,9 +215,11 @@ class AuditService:
         logger.log(
             log_level,
             "[AUDIT] %s.%s | user=%s | resource=%s:%s | severity=%s",
-            event.category, event.action,
+            event.category,
+            event.action,
             event.user_email or event.user_id or "system",
-            event.resource_type, event.resource_id,
+            event.resource_type,
+            event.resource_id,
             event.severity.value,
         )
 
@@ -220,16 +229,16 @@ class AuditService:
 
     async def search(
         self,
-        organization_id: Optional[str] = None,
-        category: Optional[str] = None,
-        action: Optional[str] = None,
-        user_id: Optional[str] = None,
-        severity: Optional[AuditSeverity] = None,
-        start_time: Optional[float] = None,
-        end_time: Optional[float] = None,
+        organization_id: str | None = None,
+        category: str | None = None,
+        action: str | None = None,
+        user_id: str | None = None,
+        severity: AuditSeverity | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> Tuple[List[AuditEvent], int]:
+    ) -> tuple[list[AuditEvent], int]:
         """
         Search audit events with filtering.
         Returns (events, total_count).
@@ -255,7 +264,7 @@ class AuditService:
         total = len(filtered)
         # Sort by timestamp descending
         filtered.sort(key=lambda e: e.timestamp, reverse=True)
-        page = filtered[offset:offset + limit]
+        page = filtered[offset : offset + limit]
 
         return page, total
 
@@ -264,8 +273,8 @@ class AuditService:
     async def export_json(
         self,
         organization_id: str,
-        start_time: Optional[float] = None,
-        end_time: Optional[float] = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> str:
         """Export audit logs as JSON."""
         events, _ = await self.search(
@@ -282,8 +291,8 @@ class AuditService:
     async def export_csv(
         self,
         organization_id: str,
-        start_time: Optional[float] = None,
-        end_time: Optional[float] = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> str:
         """Export audit logs as CSV."""
         events, _ = await self.search(
@@ -292,7 +301,9 @@ class AuditService:
             end_time=end_time,
             limit=10000,
         )
-        lines = ["timestamp,category,action,severity,user_email,resource_type,resource_id,ip_address"]
+        lines = [
+            "timestamp,category,action,severity,user_email,resource_type,resource_id,ip_address"
+        ]
         for e in events:
             lines.append(
                 f"{e.timestamp},{e.category},{e.action},{e.severity.value},"
@@ -311,7 +322,7 @@ class AuditService:
         Generate a compliance report for the specified framework.
         Evaluates controls against current system state and audit history.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         if framework == ComplianceFramework.SOC2:
             controls = self._evaluate_soc2_controls(organization_id)
@@ -331,25 +342,29 @@ class AuditService:
 
         logger.info(
             "Compliance report generated: %s for org %s — score: %.1f%%",
-            framework.value, organization_id, report.score,
+            framework.value,
+            organization_id,
+            report.score,
         )
 
         return report
 
-    def _evaluate_soc2_controls(self, org_id: str) -> List[ComplianceControl]:
+    def _evaluate_soc2_controls(self, org_id: str) -> list[ComplianceControl]:
         """Evaluate SOC 2 Type II controls."""
         return [
             ComplianceControl(
-                id="CC6.1", framework=ComplianceFramework.SOC2,
+                id="CC6.1",
+                framework=ComplianceFramework.SOC2,
                 name="Logical Access Security",
                 description="System restricts logical access using authentication and authorization",
                 category="Security",
                 status=ComplianceStatus.COMPLIANT,
                 evidence="JWT-based authentication with RBAC (viewer/editor/admin roles). "
-                         "SSO/SAML support for enterprise identity federation.",
+                "SSO/SAML support for enterprise identity federation.",
             ),
             ComplianceControl(
-                id="CC6.2", framework=ComplianceFramework.SOC2,
+                id="CC6.2",
+                framework=ComplianceFramework.SOC2,
                 name="Encryption of Data in Transit",
                 description="Data transmitted over networks is encrypted",
                 category="Security",
@@ -357,58 +372,64 @@ class AuditService:
                 evidence="HTTPS enforced. HTTP/2 support. TLS 1.2+ required for all connections.",
             ),
             ComplianceControl(
-                id="CC6.3", framework=ComplianceFramework.SOC2,
+                id="CC6.3",
+                framework=ComplianceFramework.SOC2,
                 name="Encryption of Data at Rest",
                 description="Sensitive data stored is encrypted",
                 category="Security",
                 status=ComplianceStatus.PARTIAL,
                 evidence="Database credentials encrypted. API keys hashed. "
-                         "Recommendation: Add full disk encryption documentation.",
+                "Recommendation: Add full disk encryption documentation.",
                 recommendation="Document disk encryption policy for production deployments.",
             ),
             ComplianceControl(
-                id="CC7.1", framework=ComplianceFramework.SOC2,
+                id="CC7.1",
+                framework=ComplianceFramework.SOC2,
                 name="System Monitoring",
                 description="System is monitored for anomalies and security events",
                 category="Monitoring",
                 status=ComplianceStatus.COMPLIANT,
                 evidence="Structured logging via structlog. Audit log with hash chain integrity. "
-                         "Prometheus metrics endpoint. Health check monitoring.",
+                "Prometheus metrics endpoint. Health check monitoring.",
             ),
             ComplianceControl(
-                id="CC7.2", framework=ComplianceFramework.SOC2,
+                id="CC7.2",
+                framework=ComplianceFramework.SOC2,
                 name="Incident Response",
                 description="Security incidents are identified and responded to",
                 category="Monitoring",
                 status=ComplianceStatus.COMPLIANT,
                 evidence="SECURITY.md with responsible disclosure process. "
-                         "48-hour acknowledgment SLA. Audit log for forensics.",
+                "48-hour acknowledgment SLA. Audit log for forensics.",
             ),
             ComplianceControl(
-                id="CC8.1", framework=ComplianceFramework.SOC2,
+                id="CC8.1",
+                framework=ComplianceFramework.SOC2,
                 name="Change Management",
                 description="Changes are authorized, tested, and documented",
                 category="Operations",
                 status=ComplianceStatus.COMPLIANT,
                 evidence="GitHub PR-based workflow. CI/CD pipeline with lint, type check, "
-                         "unit tests, and E2E tests. CHANGELOG maintained. ADRs documented.",
+                "unit tests, and E2E tests. CHANGELOG maintained. ADRs documented.",
             ),
         ]
 
-    def _evaluate_gdpr_controls(self, org_id: str) -> List[ComplianceControl]:
+    def _evaluate_gdpr_controls(self, org_id: str) -> list[ComplianceControl]:
         """Evaluate GDPR readiness controls."""
         return [
             ComplianceControl(
-                id="GDPR-5", framework=ComplianceFramework.GDPR,
+                id="GDPR-5",
+                framework=ComplianceFramework.GDPR,
                 name="Data Minimization",
                 description="Only necessary personal data is collected",
                 category="Data Protection",
                 status=ComplianceStatus.COMPLIANT,
                 evidence="Only email and username collected. No tracking pixels. "
-                         "AI engine defaults to local inference (no data sent externally).",
+                "AI engine defaults to local inference (no data sent externally).",
             ),
             ComplianceControl(
-                id="GDPR-17", framework=ComplianceFramework.GDPR,
+                id="GDPR-17",
+                framework=ComplianceFramework.GDPR,
                 name="Right to Erasure",
                 description="Users can request deletion of personal data",
                 category="Data Subject Rights",
@@ -417,48 +438,53 @@ class AuditService:
                 recommendation="Add UI for self-service data export and deletion.",
             ),
             ComplianceControl(
-                id="GDPR-25", framework=ComplianceFramework.GDPR,
+                id="GDPR-25",
+                framework=ComplianceFramework.GDPR,
                 name="Data Protection by Design",
                 description="Privacy protections built into the system",
                 category="Design",
                 status=ComplianceStatus.COMPLIANT,
                 evidence="Local-first AI (ADR-001). Environment variables for secrets. "
-                         "SSRF protection. Secret scanning in pre-commit hooks.",
+                "SSRF protection. Secret scanning in pre-commit hooks.",
             ),
             ComplianceControl(
-                id="GDPR-33", framework=ComplianceFramework.GDPR,
+                id="GDPR-33",
+                framework=ComplianceFramework.GDPR,
                 name="Breach Notification",
                 description="Data breaches reported within 72 hours",
                 category="Incident Response",
                 status=ComplianceStatus.COMPLIANT,
                 evidence="SECURITY.md defines 48-hour acknowledgment policy. "
-                         "Audit logs enable breach forensics.",
+                "Audit logs enable breach forensics.",
             ),
         ]
 
-    def _evaluate_hipaa_controls(self, org_id: str) -> List[ComplianceControl]:
+    def _evaluate_hipaa_controls(self, org_id: str) -> list[ComplianceControl]:
         """Evaluate HIPAA readiness controls."""
         return [
             ComplianceControl(
-                id="HIPAA-164.312(a)", framework=ComplianceFramework.HIPAA,
+                id="HIPAA-164.312(a)",
+                framework=ComplianceFramework.HIPAA,
                 name="Access Control",
                 description="Implement access controls for ePHI",
                 category="Technical Safeguards",
                 status=ComplianceStatus.COMPLIANT,
                 evidence="RBAC with workspace/org-level permissions. SSO/SAML support. "
-                         "JWT tokens with configurable expiration.",
+                "JWT tokens with configurable expiration.",
             ),
             ComplianceControl(
-                id="HIPAA-164.312(b)", framework=ComplianceFramework.HIPAA,
+                id="HIPAA-164.312(b)",
+                framework=ComplianceFramework.HIPAA,
                 name="Audit Controls",
                 description="Implement mechanisms to record and examine system activity",
                 category="Technical Safeguards",
                 status=ComplianceStatus.COMPLIANT,
                 evidence="Comprehensive audit logging with tamper-evident hash chaining. "
-                         "Audit log search, filter, and export capabilities.",
+                "Audit log search, filter, and export capabilities.",
             ),
             ComplianceControl(
-                id="HIPAA-164.312(e)", framework=ComplianceFramework.HIPAA,
+                id="HIPAA-164.312(e)",
+                framework=ComplianceFramework.HIPAA,
                 name="Transmission Security",
                 description="Protect ePHI during electronic transmission",
                 category="Technical Safeguards",
@@ -472,8 +498,8 @@ class AuditService:
     async def verify_chain_integrity(
         self,
         start_index: int = 0,
-        end_index: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        end_index: int | None = None,
+    ) -> dict[str, Any]:
         """
         Verify the hash chain integrity of audit events.
         Detects tampering if any event's hash doesn't match.
@@ -530,7 +556,7 @@ class AuditService:
 
 
 # ── Global singleton ──────────────────────────────────────────
-_audit_service: Optional[AuditService] = None
+_audit_service: AuditService | None = None
 
 
 def get_audit_service() -> AuditService:

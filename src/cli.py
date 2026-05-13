@@ -11,22 +11,20 @@ Usage:
 
 Built with Click for ergonomic CLI experience.
 """
+
 from __future__ import annotations
 
 import json
 import os
-import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import click
 import httpx
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 console = Console()
 error_console = Console(stderr=True)
@@ -39,6 +37,7 @@ def get_version() -> str:
     """Read version from config or fallback."""
     try:
         from src.config import get_settings
+
         return get_settings().app_version
     except Exception:
         return "2.3.0"
@@ -169,7 +168,9 @@ def init(name: str):
     console.print(f"    [dim]{project_dir}/project.json[/dim]")
     console.print(f"    [dim]{project_dir}/environments/dev.json[/dim]")
     console.print(f"    [dim]{project_dir}/collections/example.json[/dim]")
-    console.print(f"\n  Next: [bold cyan]apiwatch run .apiwatch/collections/example.json[/bold cyan]")
+    console.print(
+        "\n  Next: [bold cyan]apiwatch run .apiwatch/collections/example.json[/bold cyan]"
+    )
 
 
 # ── apiwatch run ──────────────────────────────────────────────
@@ -183,10 +184,10 @@ def init(name: str):
 def run(
     ctx: click.Context,
     collection: str,
-    env_file: Optional[str],
+    env_file: str | None,
     bail: bool,
     timeout: int,
-    output: Optional[str],
+    output: str | None,
 ):
     """Execute a collection of API requests."""
     server = ctx.obj["server"]
@@ -271,7 +272,9 @@ def run(
             if success:
                 passed += 1
                 if not quiet:
-                    console.print(f"[green]✓ {resp.status_code}[/green] [dim]({elapsed:.0f}ms)[/dim]")
+                    console.print(
+                        f"[green]✓ {resp.status_code}[/green] [dim]({elapsed:.0f}ms)[/dim]"
+                    )
             else:
                 failed += 1
                 if not quiet:
@@ -305,13 +308,15 @@ def run(
     if not quiet:
         console.print()
         color = "green" if failed == 0 else "red"
-        console.print(Panel(
-            f"[{color}]{passed} passed[/{color}] · "
-            f"{'[red]' + str(failed) + ' failed[/red]' if failed else '[dim]0 failed[/dim]'} · "
-            f"[dim]{len(results)} total · {total_time:.0f}ms[/dim]",
-            title="[bold]Results[/bold]",
-            border_style=color,
-        ))
+        console.print(
+            Panel(
+                f"[{color}]{passed} passed[/{color}] · "
+                f"{'[red]' + str(failed) + ' failed[/red]' if failed else '[dim]0 failed[/dim]'} · "
+                f"[dim]{len(results)} total · {total_time:.0f}ms[/dim]",
+                title="[bold]Results[/bold]",
+                border_style=color,
+            )
+        )
 
     # Save results
     if output:
@@ -339,7 +344,7 @@ def run(
 @click.argument("collection", type=click.Path(exists=True))
 @click.option("--format", "-f", "fmt", type=click.Choice(["curl", "json"]), default="curl")
 @click.option("--env", "-e", "env_file", type=click.Path(exists=True), help="Environment file")
-def export(collection: str, fmt: str, env_file: Optional[str]):
+def export(collection: str, fmt: str, env_file: str | None):
     """Export a collection as cURL commands or JSON."""
     try:
         with open(collection) as f:

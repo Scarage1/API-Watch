@@ -2,16 +2,16 @@
 Collections & Saved Requests CRUD routes.
 Workspace-aware: when X-Workspace-Id header is sent, scopes to that workspace.
 """
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import User, Collection, SavedRequest, ActivityLog, ActivityAction
 from ..jwt_auth import get_current_user_or_apikey as get_current_user
+from ..models import ActivityAction, ActivityLog, Collection, SavedRequest, User
 from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/collections", tags=["Collections"])
@@ -19,50 +19,52 @@ router = APIRouter(prefix="/collections", tags=["Collections"])
 
 # --- Schemas ---
 
+
 class SavedRequestCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     method: str = "GET"
     url: str
-    headers: Optional[dict] = {}
-    params: Optional[dict] = {}
-    body: Optional[str] = None
+    headers: dict | None = {}
+    params: dict | None = {}
+    body: str | None = None
     body_type: str = "json"
-    auth_config: Optional[dict] = None
+    auth_config: dict | None = None
     timeout: int = 10
     sort_order: int = 0
 
 
 class SavedRequestUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    method: Optional[str] = None
-    url: Optional[str] = None
-    headers: Optional[dict] = None
-    params: Optional[dict] = None
-    body: Optional[str] = None
-    body_type: Optional[str] = None
-    auth_config: Optional[dict] = None
-    timeout: Optional[int] = None
-    sort_order: Optional[int] = None
+    name: str | None = None
+    description: str | None = None
+    method: str | None = None
+    url: str | None = None
+    headers: dict | None = None
+    params: dict | None = None
+    body: str | None = None
+    body_type: str | None = None
+    auth_config: dict | None = None
+    timeout: int | None = None
+    sort_order: int | None = None
 
 
 class CollectionCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class CollectionUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
 
 
 # --- Collection CRUD ---
 
+
 @router.get("")
 async def list_collections(
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List all collections for the current user/workspace."""
@@ -91,7 +93,7 @@ async def list_collections(
 async def create_collection(
     body: CollectionCreate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new collection."""
@@ -135,11 +137,15 @@ async def create_collection(
 async def get_collection(
     collection_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a collection with its requests."""
-    query = select(Collection).where(Collection.id == collection_id).options(selectinload(Collection.requests))
+    query = (
+        select(Collection)
+        .where(Collection.id == collection_id)
+        .options(selectinload(Collection.requests))
+    )
     if workspace_id:
         query = query.where(Collection.workspace_id == workspace_id)
     else:
@@ -180,7 +186,7 @@ async def update_collection(
     collection_id: str,
     body: CollectionUpdate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a collection."""
@@ -208,7 +214,7 @@ async def update_collection(
 async def delete_collection(
     collection_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a collection and all its requests."""
@@ -239,12 +245,13 @@ async def delete_collection(
 
 # --- Saved Request CRUD ---
 
+
 @router.post("/{collection_id}/requests", status_code=201)
 async def create_request(
     collection_id: str,
     body: SavedRequestCreate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Add a request to a collection."""
@@ -289,7 +296,7 @@ async def update_request(
     request_id: str,
     body: SavedRequestUpdate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a saved request."""
@@ -330,7 +337,7 @@ async def delete_request(
     collection_id: str,
     request_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a saved request."""

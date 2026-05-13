@@ -4,12 +4,12 @@ Background scheduler for API monitors.
 Runs as an asyncio background task during the FastAPI lifespan.
 Checks for monitors that are due for execution and dispatches them.
 """
+
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import _get_session_factory
 from .models import Monitor
@@ -50,14 +50,14 @@ async def _check_and_run_due_monitors() -> None:
 
     session_factory = _get_session_factory()
     async with session_factory() as db:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Find enabled monitors whose next_run_at is in the past
         result = await db.execute(
             select(Monitor.id)
             .where(
-                Monitor.enabled == True,
-                Monitor.next_run_at != None,
+                Monitor.enabled,
+                Monitor.next_run_at is not None,
                 Monitor.next_run_at <= now,
             )
             .limit(20)  # Process max 20 per tick to avoid overload

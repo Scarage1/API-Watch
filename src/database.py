@@ -4,10 +4,11 @@ Database configuration and session management.
 Supports both PostgreSQL (asyncpg) for production and SQLite (aiosqlite)
 for development/testing.  All settings come from ``src.config.Settings``.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -16,13 +17,14 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool, AsyncAdaptedQueuePool, StaticPool
+from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool, StaticPool
 
 logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
     """Base class for all database models."""
+
     pass
 
 
@@ -121,6 +123,7 @@ async def check_db_health() -> bool:
     """Return True if the DB is reachable."""
     try:
         from sqlalchemy import text
+
         eng = _get_engine()
         async with eng.connect() as conn:
             await conn.execute(text("SELECT 1"))

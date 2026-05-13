@@ -1,26 +1,32 @@
 """
 Organization & Team management routes.
 """
+
 import re
-from typing import Optional, List
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import (
-    User, Organization, Team, TeamMember, OrgRole,
-    Workspace, WorkspaceMember, WorkspaceRole,
-)
 from ..jwt_auth import get_current_user
+from ..models import (
+    Organization,
+    OrgRole,
+    Team,
+    TeamMember,
+    User,
+    Workspace,
+)
 from ..rbac import check_org_access
 
 router = APIRouter(prefix="/orgs", tags=["Organizations"])
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class OrgCreate(BaseModel):
     name: str
@@ -39,17 +45,17 @@ class OrgCreate(BaseModel):
 
 
 class OrgUpdate(BaseModel):
-    name: Optional[str] = None
+    name: str | None = None
 
 
 class TeamCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class TeamUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
 
 
 class TeamMemberAdd(BaseModel):
@@ -62,6 +68,7 @@ class TeamMemberUpdate(BaseModel):
 
 
 # ── Organization CRUD ─────────────────────────────────────────────────────────
+
 
 @router.get("")
 async def list_organizations(
@@ -81,8 +88,11 @@ async def list_organizations(
     )
 
     from sqlalchemy import union
+
     combined = union(owned_q, member_q).subquery()
-    result = await db.execute(select(Organization).where(Organization.id.in_(select(combined.c.id))))
+    result = await db.execute(
+        select(Organization).where(Organization.id.in_(select(combined.c.id)))
+    )
     orgs = result.scalars().all()
 
     return [
@@ -106,9 +116,7 @@ async def create_organization(
 ):
     """Create a new organization."""
     # Check slug uniqueness
-    existing = await db.execute(
-        select(Organization).where(Organization.slug == body.slug)
-    )
+    existing = await db.execute(select(Organization).where(Organization.slug == body.slug))
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -150,15 +158,11 @@ async def get_organization(
 
     # Count teams and members
     team_count = (
-        await db.execute(
-            select(func.count()).where(Team.organization_id == org_id)
-        )
+        await db.execute(select(func.count()).where(Team.organization_id == org_id))
     ).scalar() or 0
 
     ws_count = (
-        await db.execute(
-            select(func.count()).where(Workspace.organization_id == org_id)
-        )
+        await db.execute(select(func.count()).where(Workspace.organization_id == org_id))
     ).scalar() or 0
 
     return {
@@ -207,6 +211,7 @@ async def delete_organization(
 
 
 # ── Team CRUD ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/{org_id}/teams")
 async def list_teams(
@@ -324,6 +329,7 @@ async def delete_team(
 
 # ── Team Members ──────────────────────────────────────────────────────────────
 
+
 @router.get("/{org_id}/teams/{team_id}/members")
 async def list_team_members(
     org_id: str,
@@ -386,9 +392,7 @@ async def add_team_member(
 
     # Check not already a member
     result = await db.execute(
-        select(TeamMember).where(
-            TeamMember.team_id == team_id, TeamMember.user_id == body.user_id
-        )
+        select(TeamMember).where(TeamMember.team_id == team_id, TeamMember.user_id == body.user_id)
     )
     if result.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="User is already a member of this team")

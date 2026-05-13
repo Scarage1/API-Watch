@@ -2,20 +2,27 @@
 Monitor CRUD routes — create, list, update, delete monitors,
 view run history, and trigger manual execution.
 """
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+
+from datetime import UTC
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import (
-    User, Monitor, MonitorRun, MonitorStatus, Collection,
-    MonitorNotification, NotificationChannel,
-    ActivityLog, ActivityAction, _utcnow,
-)
 from ..jwt_auth import get_current_user_or_apikey as get_current_user
+from ..models import (
+    ActivityAction,
+    ActivityLog,
+    Collection,
+    Monitor,
+    MonitorNotification,
+    MonitorRun,
+    User,
+    _utcnow,
+)
 from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/monitors", tags=["Monitoring"])
@@ -23,35 +30,38 @@ router = APIRouter(prefix="/monitors", tags=["Monitoring"])
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class MonitorCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     collection_id: str
     cron_expression: str = "*/5 * * * *"
     enabled: bool = True
-    assertions: List[dict] = []
+    assertions: list[dict] = []
     alert_after_failures: int = 1
-    channel_ids: List[str] = []
+    channel_ids: list[str] = []
 
 
 class MonitorUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    cron_expression: Optional[str] = None
-    enabled: Optional[bool] = None
-    assertions: Optional[List[dict]] = None
-    alert_after_failures: Optional[int] = None
-    channel_ids: Optional[List[str]] = None
+    name: str | None = None
+    description: str | None = None
+    cron_expression: str | None = None
+    enabled: bool | None = None
+    assertions: list[dict] | None = None
+    alert_after_failures: int | None = None
+    channel_ids: list[str] | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _compute_next_run(cron_expr: str) -> Optional[str]:
+
+def _compute_next_run(cron_expr: str) -> str | None:
     """Compute next run time from cron expression. Returns ISO string or None."""
     try:
         from croniter import croniter
+
         cron = croniter(cron_expr, _utcnow())
-        return cron.get_next().isoformat() if hasattr(cron.get_next(), 'isoformat') else None
+        return cron.get_next().isoformat() if hasattr(cron.get_next(), "isoformat") else None
     except Exception:
         return None
 
@@ -78,11 +88,12 @@ def _monitor_to_dict(m: Monitor) -> dict:
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
+
 @router.post("", status_code=201)
 async def create_monitor(
     body: MonitorCreate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new monitor."""
@@ -111,10 +122,12 @@ async def create_monitor(
     # Compute next run
     try:
         from croniter import croniter
+
         cron = croniter(body.cron_expression, _utcnow())
         monitor.next_run_at = cron.get_next(ret_type=float)
-        from datetime import datetime, timezone
-        monitor.next_run_at = datetime.fromtimestamp(monitor.next_run_at, tz=timezone.utc)
+        from datetime import datetime
+
+        monitor.next_run_at = datetime.fromtimestamp(monitor.next_run_at, tz=UTC)
     except Exception:
         pass
 
@@ -128,9 +141,12 @@ async def create_monitor(
 
     # Activity log
     log = ActivityLog(
-        workspace_id=workspace_id, user_id=user.id,
-        action=ActivityAction.CREATED, resource_type="monitor",
-        resource_id=monitor.id, resource_name=body.name,
+        workspace_id=workspace_id,
+        user_id=user.id,
+        action=ActivityAction.CREATED,
+        resource_type="monitor",
+        resource_id=monitor.id,
+        resource_name=body.name,
     )
     db.add(log)
 
@@ -143,7 +159,7 @@ async def create_monitor(
 @router.get("")
 async def list_monitors(
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List monitors for the current workspace."""
@@ -162,7 +178,7 @@ async def list_monitors(
 async def get_monitor(
     monitor_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a single monitor with details."""
@@ -187,7 +203,7 @@ async def update_monitor(
     monitor_id: str,
     body: MonitorUpdate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a monitor."""
@@ -223,10 +239,12 @@ async def update_monitor(
     # Recompute next_run_at if cron changed
     if "cron_expression" in update_data:
         try:
+            from datetime import datetime
+
             from croniter import croniter
-            from datetime import datetime, timezone
+
             cron = croniter(monitor.cron_expression, _utcnow())
-            monitor.next_run_at = datetime.fromtimestamp(cron.get_next(ret_type=float), tz=timezone.utc)
+            monitor.next_run_at = datetime.fromtimestamp(cron.get_next(ret_type=float), tz=UTC)
         except Exception:
             pass
 
@@ -239,7 +257,7 @@ async def update_monitor(
 async def delete_monitor(
     monitor_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a monitor and all its runs."""
@@ -254,9 +272,12 @@ async def delete_monitor(
         raise HTTPException(status_code=404, detail="Monitor not found")
 
     log = ActivityLog(
-        workspace_id=workspace_id, user_id=user.id,
-        action=ActivityAction.DELETED, resource_type="monitor",
-        resource_id=monitor.id, resource_name=monitor.name,
+        workspace_id=workspace_id,
+        user_id=user.id,
+        action=ActivityAction.DELETED,
+        resource_type="monitor",
+        resource_id=monitor.id,
+        resource_name=monitor.name,
     )
     db.add(log)
 
@@ -266,13 +287,14 @@ async def delete_monitor(
 
 # ── Run History ───────────────────────────────────────────────────────────────
 
+
 @router.get("/{monitor_id}/runs")
 async def list_monitor_runs(
     monitor_id: str,
     limit: int = 50,
     offset: int = 0,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List runs for a monitor, newest first."""
@@ -319,7 +341,7 @@ async def get_monitor_run(
     monitor_id: str,
     run_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get detailed run results."""
@@ -332,9 +354,7 @@ async def get_monitor_run(
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Monitor not found")
 
-    run_q = select(MonitorRun).where(
-        MonitorRun.id == run_id, MonitorRun.monitor_id == monitor_id
-    )
+    run_q = select(MonitorRun).where(MonitorRun.id == run_id, MonitorRun.monitor_id == monitor_id)
     result = await db.execute(run_q)
     run = result.scalar_one_or_none()
     if not run:
@@ -359,12 +379,13 @@ async def get_monitor_run(
 
 # ── Manual Trigger ────────────────────────────────────────────────────────────
 
+
 @router.post("/{monitor_id}/trigger", status_code=202)
 async def trigger_monitor(
     monitor_id: str,
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Manually trigger a monitor run. Runs in the background."""
@@ -379,6 +400,7 @@ async def trigger_monitor(
         raise HTTPException(status_code=404, detail="Monitor not found")
 
     from ..monitor_executor import execute_monitor
+
     background_tasks.add_task(execute_monitor, monitor_id)
 
     return {"detail": "Monitor execution triggered", "monitor_id": monitor_id}

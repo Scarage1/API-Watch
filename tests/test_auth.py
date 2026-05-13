@@ -1,12 +1,14 @@
 """
 Tests for authentication module.
 """
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
+
 from src.auth import AuthHandler, create_auth_from_config
 
 

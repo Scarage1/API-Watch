@@ -1,36 +1,39 @@
 """
 Workspace management routes — CRUD, member management, switch active.
 """
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import (
-    User, Workspace, WorkspaceMember, WorkspaceRole,
-    Organization,
-)
 from ..jwt_auth import get_current_user
-from ..rbac import require_workspace_access, check_org_access, get_workspace_id
-from ..models import OrgRole
+from ..models import (
+    OrgRole,
+    User,
+    Workspace,
+    WorkspaceMember,
+    WorkspaceRole,
+)
+from ..rbac import check_org_access, get_workspace_id, require_workspace_access
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class WorkspaceCreate(BaseModel):
     name: str
-    description: Optional[str] = None
-    organization_id: Optional[str] = None  # None → personal workspace
+    description: str | None = None
+    organization_id: str | None = None  # None → personal workspace
 
 
 class WorkspaceUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
 
 
 class WorkspaceMemberAdd(BaseModel):
@@ -43,6 +46,7 @@ class WorkspaceMemberUpdate(BaseModel):
 
 
 # ── Workspace CRUD ────────────────────────────────────────────────────────────
+
 
 @router.get("")
 async def list_workspaces(
@@ -67,9 +71,7 @@ async def list_workspaces(
             "is_personal": ws.is_personal,
             "organization_id": ws.organization_id,
             "member_count": len(ws.members),
-            "my_role": next(
-                (m.role.value for m in ws.members if m.user_id == user.id), None
-            ),
+            "my_role": next((m.role.value for m in ws.members if m.user_id == user.id), None),
             "created_at": ws.created_at.isoformat(),
         }
         for ws in workspaces
@@ -121,7 +123,7 @@ async def create_workspace(
 @router.get("/current")
 async def get_current_workspace(
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get workspace details for the current X-Workspace-Id header (or user default)."""
@@ -130,9 +132,7 @@ async def get_current_workspace(
         return None
 
     result = await db.execute(
-        select(Workspace)
-        .where(Workspace.id == ws_id)
-        .options(selectinload(Workspace.members))
+        select(Workspace).where(Workspace.id == ws_id).options(selectinload(Workspace.members))
     )
     ws = result.scalar_one_or_none()
     if not ws:
@@ -145,9 +145,7 @@ async def get_current_workspace(
         "is_personal": ws.is_personal,
         "organization_id": ws.organization_id,
         "member_count": len(ws.members),
-        "my_role": next(
-            (m.role.value for m in ws.members if m.user_id == user.id), None
-        ),
+        "my_role": next((m.role.value for m in ws.members if m.user_id == user.id), None),
     }
 
 
@@ -179,9 +177,7 @@ async def get_workspace(
         "is_personal": ws.is_personal,
         "organization_id": ws.organization_id,
         "member_count": len(ws.members),
-        "my_role": next(
-            (m.role.value for m in ws.members if m.user_id == user.id), None
-        ),
+        "my_role": next((m.role.value for m in ws.members if m.user_id == user.id), None),
         "created_at": ws.created_at.isoformat(),
     }
 
@@ -194,9 +190,7 @@ async def update_workspace(
     db: AsyncSession = Depends(get_db),
 ):
     """Update workspace (admin only)."""
-    result = await db.execute(
-        select(Workspace).where(Workspace.id == workspace_id)
-    )
+    result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     ws = result.scalar_one_or_none()
     if not ws:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -218,9 +212,7 @@ async def delete_workspace(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete workspace (admin only). Cannot delete personal workspaces."""
-    result = await db.execute(
-        select(Workspace).where(Workspace.id == workspace_id)
-    )
+    result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     ws = result.scalar_one_or_none()
     if not ws:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -255,6 +247,7 @@ async def set_default_workspace(
 
 
 # ── Workspace Members ────────────────────────────────────────────────────────
+
 
 @router.get("/{workspace_id}/members")
 async def list_workspace_members(
@@ -346,7 +339,11 @@ async def update_workspace_member(
         raise HTTPException(status_code=404, detail="Member not found")
 
     # Can't demote yourself from admin
-    if member.user_id == user.id and member.role == WorkspaceRole.ADMIN and body.role != WorkspaceRole.ADMIN:
+    if (
+        member.user_id == user.id
+        and member.role == WorkspaceRole.ADMIN
+        and body.role != WorkspaceRole.ADMIN
+    ):
         raise HTTPException(status_code=400, detail="Cannot demote yourself")
 
     member.role = body.role

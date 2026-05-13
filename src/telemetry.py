@@ -10,13 +10,13 @@ Usage in api_server.py:
     setup_telemetry(app)
     app.middleware("http")(telemetry_middleware)
 """
+
+import logging
 import time
 import uuid
-import logging
-from typing import Optional, Dict, Any, List
-from dataclasses import dataclass, field
 from collections import defaultdict
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import Response
@@ -26,16 +26,18 @@ logger = logging.getLogger("apiwatch.telemetry")
 
 # ── Trace / Span dataclass ────────────────────────────────────────────────────
 
+
 @dataclass
 class Span:
     """A lightweight trace span."""
+
     trace_id: str
     span_id: str
     name: str
     start_time: float
-    end_time: Optional[float] = None
-    status_code: Optional[int] = None
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    end_time: float | None = None
+    status_code: int | None = None
+    attributes: dict[str, Any] = field(default_factory=dict)
 
     @property
     def duration_ms(self) -> float:
@@ -58,15 +60,16 @@ class Span:
 
 # ── Metrics collector ─────────────────────────────────────────────────────────
 
+
 class MetricsCollector:
     """In-process metrics — request count, latency histogram, error counts."""
 
     def __init__(self):
         self.request_count: int = 0
         self.error_count: int = 0
-        self.status_counts: Dict[int, int] = defaultdict(int)
-        self.method_counts: Dict[str, int] = defaultdict(int)
-        self.path_latencies: Dict[str, List[float]] = defaultdict(list)
+        self.status_counts: dict[int, int] = defaultdict(int)
+        self.method_counts: dict[str, int] = defaultdict(int)
+        self.path_latencies: dict[str, list[float]] = defaultdict(list)
         self.total_latency: float = 0.0
         self._max_path_entries = 200  # cap per-path data
         self._start_time: float = time.time()
@@ -90,7 +93,7 @@ class MetricsCollector:
         latencies = self.path_latencies[key]
         latencies.append(duration_ms)
         if len(latencies) > self._max_path_entries:
-            self.path_latencies[key] = latencies[-self._max_path_entries:]
+            self.path_latencies[key] = latencies[-self._max_path_entries :]
 
     def get_summary(self) -> dict:
         uptime = time.time() - self._start_time
@@ -102,12 +105,14 @@ class MetricsCollector:
             if latencies:
                 avg = sum(latencies) / len(latencies)
                 p95 = sorted(latencies)[int(len(latencies) * 0.95)] if len(latencies) >= 2 else avg
-                slowest.append({
-                    "endpoint": path,
-                    "count": len(latencies),
-                    "avg_ms": round(avg, 2),
-                    "p95_ms": round(p95, 2),
-                })
+                slowest.append(
+                    {
+                        "endpoint": path,
+                        "count": len(latencies),
+                        "avg_ms": round(avg, 2),
+                        "p95_ms": round(p95, 2),
+                    }
+                )
         slowest.sort(key=lambda x: x["p95_ms"], reverse=True)
 
         return {
@@ -127,28 +132,29 @@ class MetricsCollector:
 
 # ── Recent traces ring buffer ────────────────────────────────────────────────
 
+
 class TraceStore:
     """In-memory ring buffer of recent traces for debugging."""
 
     def __init__(self, max_size: int = 500):
-        self._spans: List[Span] = []
+        self._spans: list[Span] = []
         self._max_size = max_size
 
     def add(self, span: Span) -> None:
         self._spans.append(span)
         if len(self._spans) > self._max_size:
-            self._spans = self._spans[-self._max_size:]
+            self._spans = self._spans[-self._max_size :]
 
-    def list_recent(self, limit: int = 50) -> List[dict]:
+    def list_recent(self, limit: int = 50) -> list[dict]:
         return [s.to_dict() for s in reversed(self._spans[-limit:])]
 
     def search(
         self,
-        path: Optional[str] = None,
-        min_duration_ms: Optional[float] = None,
-        status_code: Optional[int] = None,
+        path: str | None = None,
+        min_duration_ms: float | None = None,
+        status_code: int | None = None,
         limit: int = 50,
-    ) -> List[dict]:
+    ) -> list[dict]:
         results = []
         for span in reversed(self._spans):
             if path and path not in span.attributes.get("path", ""):
@@ -172,8 +178,8 @@ class TraceStore:
 
 # ── Module singletons ─────────────────────────────────────────────────────────
 
-_metrics: Optional[MetricsCollector] = None
-_traces: Optional[TraceStore] = None
+_metrics: MetricsCollector | None = None
+_traces: TraceStore | None = None
 
 
 def get_metrics() -> MetricsCollector:
@@ -250,12 +256,18 @@ async def telemetry_middleware(request: Request, call_next) -> Response:
         if span.status_code and span.status_code >= 500:
             logger.error(
                 "HTTP %s %s → %s (%.1fms) trace=%s",
-                request.method, path, span.status_code,
-                span.duration_ms, trace_id,
+                request.method,
+                path,
+                span.status_code,
+                span.duration_ms,
+                trace_id,
             )
         elif span.duration_ms > 2000:
             logger.warning(
                 "SLOW %s %s → %s (%.1fms) trace=%s",
-                request.method, path, span.status_code,
-                span.duration_ms, trace_id,
+                request.method,
+                path,
+                span.status_code,
+                span.duration_ms,
+                trace_id,
             )

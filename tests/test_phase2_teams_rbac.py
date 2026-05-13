@@ -10,14 +10,16 @@ Covers:
   - Invitation flow (send, accept, decline, revoke)
   - Personal workspace auto-creation on registration
 """
-import pytest
-import pytest_asyncio
-from httpx import AsyncClient
 
+import pytest
+from httpx import AsyncClient
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def register_user(client: AsyncClient, email: str, username: str, password: str = "TestPass123"):
+
+async def register_user(
+    client: AsyncClient, email: str, username: str, password: str = "TestPass123"
+):
     res = await client.post(
         "/api/v1/auth/register",
         json={"email": email, "username": username, "password": password},
@@ -35,6 +37,7 @@ async def auth_headers(client: AsyncClient, email: str, username: str):
 # ══════════════════════════════════════════════════════════════════════════════
 #  PERSONAL WORKSPACE AUTO-CREATION
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestPersonalWorkspace:
     @pytest.mark.asyncio
@@ -69,6 +72,7 @@ class TestPersonalWorkspace:
 # ══════════════════════════════════════════════════════════════════════════════
 #  ORGANIZATION CRUD
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestOrganizations:
     @pytest.mark.asyncio
@@ -171,6 +175,7 @@ class TestOrganizations:
 #  TEAM CRUD
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestTeams:
     @pytest.mark.asyncio
     async def test_create_team(self, client: AsyncClient):
@@ -246,6 +251,7 @@ class TestTeams:
 # ══════════════════════════════════════════════════════════════════════════════
 #  WORKSPACE CRUD
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestWorkspaces:
     @pytest.mark.asyncio
@@ -340,6 +346,7 @@ class TestWorkspaces:
 #  WORKSPACE MEMBERS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestWorkspaceMembers:
     @pytest.mark.asyncio
     async def test_add_member(self, client: AsyncClient):
@@ -379,6 +386,7 @@ class TestWorkspaceMembers:
 #  RBAC ENFORCEMENT
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestRBAC:
     @pytest.mark.asyncio
     async def test_viewer_cannot_add_members(self, client: AsyncClient):
@@ -414,7 +422,9 @@ class TestRBAC:
     async def test_editor_cannot_delete_workspace(self, client: AsyncClient):
         """Editors should not be able to delete workspaces."""
         headers_admin, _ = await auth_headers(client, "rbac_del_admin@test.dev", "rbacdeladmin")
-        headers_editor, user_e = await auth_headers(client, "rbac_del_editor@test.dev", "rbacdeleditor")
+        headers_editor, user_e = await auth_headers(
+            client, "rbac_del_editor@test.dev", "rbacdeleditor"
+        )
 
         create_res = await client.post(
             "/api/v1/workspaces",
@@ -439,6 +449,7 @@ class TestRBAC:
 # ══════════════════════════════════════════════════════════════════════════════
 #  WORKSPACE-SCOPED COLLECTIONS
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestWorkspaceScopedCollections:
     @pytest.mark.asyncio
@@ -496,6 +507,7 @@ class TestWorkspaceScopedCollections:
 #  WORKSPACE-SCOPED ENVIRONMENTS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestWorkspaceScopedEnvironments:
     @pytest.mark.asyncio
     async def test_environment_with_workspace(self, client: AsyncClient):
@@ -520,6 +532,7 @@ class TestWorkspaceScopedEnvironments:
 # ══════════════════════════════════════════════════════════════════════════════
 #  INVITATIONS
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestInvitations:
     @pytest.mark.asyncio
@@ -576,7 +589,9 @@ class TestInvitations:
 
     @pytest.mark.asyncio
     async def test_decline_invitation(self, client: AsyncClient):
-        headers_admin, admin_user = await auth_headers(client, "inv_dec_admin@test.dev", "invdecadmin")
+        headers_admin, admin_user = await auth_headers(
+            client, "inv_dec_admin@test.dev", "invdecadmin"
+        )
         ws_id = admin_user["default_workspace_id"]
 
         invite_res = await client.post(
@@ -640,7 +655,9 @@ class TestInvitations:
 
     @pytest.mark.asyncio
     async def test_list_pending_invitations(self, client: AsyncClient):
-        headers_admin, admin_user = await auth_headers(client, "inv_list_admin@test.dev", "invlistadmin")
+        headers_admin, admin_user = await auth_headers(
+            client, "inv_list_admin@test.dev", "invlistadmin"
+        )
         ws_id = admin_user["default_workspace_id"]
 
         await client.post(
@@ -659,6 +676,7 @@ class TestInvitations:
 # ══════════════════════════════════════════════════════════════════════════════
 #  BACKWARD COMPATIBILITY
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestBackwardCompatibility:
     @pytest.mark.asyncio

@@ -15,11 +15,11 @@ Headers returned:
   X-RateLimit-Remaining   Requests remaining in the current window
   X-RateLimit-Reset       Unix timestamp when the window resets
 """
-import time
+
 import asyncio
 import logging
+import time
 from collections import defaultdict
-from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
 
 from fastapi import Request, Response
@@ -32,12 +32,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RateLimitConfig:
     """Rate limit configuration."""
+
     # Default limits (requests per window)
     default_limit: int = 60
     auth_limit: int = 10
     window_seconds: int = 60
     # Paths exempt from rate limiting
-    exempt_paths: Tuple[str, ...] = ("/health", "/docs", "/openapi.json", "/redoc")
+    exempt_paths: tuple[str, ...] = ("/health", "/docs", "/openapi.json", "/redoc")
     # Enable/disable
     enabled: bool = True
     # Use Redis backend if available
@@ -52,11 +53,11 @@ class SlidingWindowCounter:
 
     def __init__(self, window_seconds: int = 60):
         self.window = window_seconds
-        self._hits: Dict[str, list] = defaultdict(list)
+        self._hits: dict[str, list] = defaultdict(list)
         self._lock = asyncio.Lock()
         self._last_cleanup = time.time()
 
-    async def hit(self, key: str) -> Tuple[int, int, float]:
+    async def hit(self, key: str) -> tuple[int, int, float]:
         """
         Record a hit and return (count, limit, reset_time).
         Returns the current count within the sliding window.
@@ -95,7 +96,7 @@ class RedisRateLimiter:
     def __init__(self, window_seconds: int = 60):
         self.window = window_seconds
 
-    async def hit(self, key: str) -> Tuple[int, int, float]:
+    async def hit(self, key: str) -> tuple[int, int, float]:
         from .cache import get_cache
 
         cache = get_cache()
@@ -125,17 +126,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Automatically uses Redis backend when available, falls back to in-memory.
     """
 
-    def __init__(self, app, config: Optional[RateLimitConfig] = None):
+    def __init__(self, app, config: RateLimitConfig | None = None):
         super().__init__(app)
         self.config = config or RateLimitConfig()
         self._memory_counter = SlidingWindowCounter(self.config.window_seconds)
-        self._redis_counter = RedisRateLimiter(self.config.window_seconds) if self.config.use_redis else None
+        self._redis_counter = (
+            RedisRateLimiter(self.config.window_seconds) if self.config.use_redis else None
+        )
 
     async def _get_counter(self):
         """Return Redis counter if available, otherwise in-memory."""
         if self._redis_counter and self.config.use_redis:
             try:
                 from .cache import get_cache
+
                 cache = get_cache()
                 if await cache.ping():
                     return self._redis_counter

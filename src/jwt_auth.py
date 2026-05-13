@@ -2,55 +2,64 @@
 JWT Authentication for API-Watch users.
 Handles registration, login, token creation/verification, and token blacklisting.
 """
+
 import logging
-import os
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends, HTTPException, status, Header
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
 import bcrypt
+from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import get_db
-from .models import User, ApiKey
+from .models import ApiKey, User
 
 logger = logging.getLogger(__name__)
 
 # --- Validation patterns ---
 _PASSWORD_MIN_LENGTH = 8
-_PASSWORD_PATTERN = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$')
-_EMAIL_PATTERN = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+_PASSWORD_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$")
+_EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
 
 # Configuration — loaded from config module
 def _load_config():
     from .config import get_settings
+
     return get_settings()
 
+
 _settings = None
+
+
 def _get_settings():
     global _settings
     if _settings is None:
         _settings = _load_config()
     return _settings
 
+
 # Lazy accessors (defer import until first use to avoid circular imports at module load)
 def _secret_key() -> str:
     return _get_settings().jwt_secret_key
 
+
 def _algorithm() -> str:
     return _get_settings().jwt_algorithm
+
 
 def _access_expire() -> int:
     return _get_settings().access_token_expire_minutes
 
+
 def _refresh_expire() -> int:
     return _get_settings().refresh_token_expire_days
+
 
 # Bearer token extractor
 security = HTTPBearer(auto_error=False)
@@ -58,38 +67,41 @@ security = HTTPBearer(auto_error=False)
 
 # --- Pydantic schemas ---
 
+
 class RegisterRequest(BaseModel):
     email: str
     username: str
     password: str
 
-    @field_validator('email')
+    @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
         v = v.strip().lower()
         if not _EMAIL_PATTERN.match(v):
-            raise ValueError('Invalid email address format')
+            raise ValueError("Invalid email address format")
         return v
 
-    @field_validator('password')
+    @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
         if len(v) < _PASSWORD_MIN_LENGTH:
-            raise ValueError(f'Password must be at least {_PASSWORD_MIN_LENGTH} characters')
+            raise ValueError(f"Password must be at least {_PASSWORD_MIN_LENGTH} characters")
         if not _PASSWORD_PATTERN.match(v):
-            raise ValueError('Password must contain at least one uppercase letter, one lowercase letter, and one digit')
+            raise ValueError(
+                "Password must contain at least one uppercase letter, one lowercase letter, and one digit"
+            )
         return v
 
-    @field_validator('username')
+    @field_validator("username")
     @classmethod
     def validate_username(cls, v: str) -> str:
         v = v.strip()
         if len(v) < 3:
-            raise ValueError('Username must be at least 3 characters')
+            raise ValueError("Username must be at least 3 characters")
         if len(v) > 50:
-            raise ValueError('Username must be 50 characters or fewer')
-        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
-            raise ValueError('Username can only contain letters, numbers, hyphens, and underscores')
+            raise ValueError("Username must be 50 characters or fewer")
+        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
+            raise ValueError("Username can only contain letters, numbers, hyphens, and underscores")
         return v
 
 
@@ -111,16 +123,17 @@ class RefreshRequest(BaseModel):
 
 # --- Helper functions ---
 
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
 def create_access_token(user_id: str, username: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=_access_expire())
+    expire = datetime.now(UTC) + timedelta(minutes=_access_expire())
     payload = {
         "sub": user_id,
         "username": username,
@@ -132,7 +145,7 @@ def create_access_token(user_id: str, username: str) -> str:
 
 
 def create_refresh_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=_refresh_expire())
+    expire = datetime.now(UTC) + timedelta(days=_refresh_expire())
     payload = {
         "sub": user_id,
         "type": "refresh",
@@ -153,7 +166,7 @@ def decode_token(token: str) -> dict:
         )
 
 
-async def blacklist_token(jti: str, ttl: Optional[int] = None) -> None:
+async def blacklist_token(jti: str, ttl: int | None = None) -> None:
     """Add a JTI to the blacklist (stored in cache/Redis)."""
     from .cache import get_cache
 
@@ -213,7 +226,7 @@ async def _get_or_create_default_user(db: AsyncSession) -> User:
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """FastAPI dependency — returns authenticated user from JWT, or the
@@ -257,9 +270,9 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
-) -> Optional[User]:
+) -> User | None:
     """Like get_current_user but returns None if no token (for public endpoints)."""
     if credentials is None:
         return None
@@ -270,9 +283,9 @@ async def get_optional_user(
 
 
 async def get_current_user_or_apikey(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ) -> User:
     """Accept either JWT Bearer or X-API-Key header for authentication.
 
@@ -296,21 +309,19 @@ async def _resolve_api_key(raw_key: str, db: AsyncSession) -> User:
     """Validate a raw API key string and return the owning User."""
     prefix = raw_key[:8]
 
-    result = await db.execute(
-        select(ApiKey).where(ApiKey.key_prefix == prefix, ApiKey.is_active == True)
-    )
+    result = await db.execute(select(ApiKey).where(ApiKey.key_prefix == prefix, ApiKey.is_active))
     candidates = result.scalars().all()
 
     for api_key in candidates:
         if verify_password(raw_key, api_key.key_hash):
             # Check expiry
-            if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
+            if api_key.expires_at and api_key.expires_at < datetime.now(UTC):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="API key has expired",
                 )
             # Update last_used_at
-            api_key.last_used_at = datetime.now(timezone.utc)
+            api_key.last_used_at = datetime.now(UTC)
             await db.commit()
 
             # Load owner

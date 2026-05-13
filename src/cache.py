@@ -7,12 +7,12 @@ Provides a unified async cache interface with two backends:
 
 The active backend is chosen automatically based on ``settings.redis_url``.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
-from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 class CacheBackend:
     """Abstract cache interface."""
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         raise NotImplementedError
 
-    async def set(self, key: str, value: str, ttl: Optional[int] = None) -> None:
+    async def set(self, key: str, value: str, ttl: int | None = None) -> None:
         raise NotImplementedError
 
     async def delete(self, key: str) -> None:
@@ -62,7 +62,7 @@ class InMemoryBackend(CacheBackend):
     """Dict-based cache with TTL support.  Used in dev/test when Redis is unavailable."""
 
     def __init__(self) -> None:
-        self._store: Dict[str, Tuple[str, Optional[float]]] = {}  # key → (value, expire_at)
+        self._store: dict[str, tuple[str, float | None]] = {}  # key → (value, expire_at)
         self._lock = asyncio.Lock()
 
     def _is_expired(self, key: str) -> bool:
@@ -74,13 +74,13 @@ class InMemoryBackend(CacheBackend):
             return True
         return False
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         async with self._lock:
             if self._is_expired(key):
                 return None
             return self._store[key][0]
 
-    async def set(self, key: str, value: str, ttl: Optional[int] = None) -> None:
+    async def set(self, key: str, value: str, ttl: int | None = None) -> None:
         async with self._lock:
             expire_at = (time.time() + ttl) if ttl else None
             self._store[key] = (value, expire_at)
@@ -142,10 +142,10 @@ class RedisBackend(CacheBackend):
             retry_on_timeout=True,
         )
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         return await self._redis.get(key)
 
-    async def set(self, key: str, value: str, ttl: Optional[int] = None) -> None:
+    async def set(self, key: str, value: str, ttl: int | None = None) -> None:
         if ttl:
             await self._redis.setex(key, ttl, value)
         else:
@@ -181,7 +181,7 @@ class RedisBackend(CacheBackend):
 
 # ── Factory ──────────────────────────────────────────────────────────────────
 
-_cache: Optional[CacheBackend] = None
+_cache: CacheBackend | None = None
 
 
 def _create_backend(redis_url: str) -> CacheBackend:
@@ -201,6 +201,7 @@ def get_cache() -> CacheBackend:
     global _cache
     if _cache is None:
         from .config import get_settings
+
         _cache = _create_backend(get_settings().redis_url)
     return _cache
 

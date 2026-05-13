@@ -3,12 +3,13 @@ OAuth 2.0 helper — supports Authorization Code + PKCE, Client Credentials,
 and Password Grant flows. Provides both utility functions for the runner
 and FastAPI routes for the frontend token-exchange proxy.
 """
-import hashlib
+
 import base64
-import secrets
+import hashlib
 import logging
-from typing import Optional, Dict, Any
+import secrets
 from dataclasses import dataclass
+from typing import Any
 
 try:
     import httpx
@@ -20,10 +21,13 @@ logger = logging.getLogger(__name__)
 
 # ── PKCE helpers ──────────────────────────────────────────────────────────────
 
+
 def generate_code_verifier(length: int = 64) -> str:
     """Generate a cryptographically random PKCE code_verifier (43-128 chars)."""
     length = max(43, min(128, length))
-    return base64.urlsafe_b64encode(secrets.token_bytes(length)).rstrip(b"=").decode("ascii")[:length]
+    return (
+        base64.urlsafe_b64encode(secrets.token_bytes(length)).rstrip(b"=").decode("ascii")[:length]
+    )
 
 
 def generate_code_challenge(verifier: str) -> str:
@@ -34,19 +38,21 @@ def generate_code_challenge(verifier: str) -> str:
 
 # ── Token exchange functions ──────────────────────────────────────────────────
 
+
 @dataclass
 class OAuthTokenResult:
     """Result from an OAuth token exchange."""
+
     success: bool
-    access_token: Optional[str] = None
-    refresh_token: Optional[str] = None
+    access_token: str | None = None
+    refresh_token: str | None = None
     token_type: str = "Bearer"
-    expires_in: Optional[int] = None
-    scope: Optional[str] = None
-    id_token: Optional[str] = None
-    error: Optional[str] = None
-    error_description: Optional[str] = None
-    raw_response: Optional[Dict[str, Any]] = None
+    expires_in: int | None = None
+    scope: str | None = None
+    id_token: str | None = None
+    error: str | None = None
+    error_description: str | None = None
+    raw_response: dict[str, Any] | None = None
 
 
 async def exchange_authorization_code(
@@ -54,15 +60,15 @@ async def exchange_authorization_code(
     client_id: str,
     code: str,
     redirect_uri: str,
-    client_secret: Optional[str] = None,
-    code_verifier: Optional[str] = None,
-    extra_params: Optional[Dict[str, str]] = None,
+    client_secret: str | None = None,
+    code_verifier: str | None = None,
+    extra_params: dict[str, str] | None = None,
 ) -> OAuthTokenResult:
     """Exchange an authorization code for tokens (Auth Code / Auth Code + PKCE)."""
     if httpx is None:
         return OAuthTokenResult(success=False, error="httpx not installed")
 
-    data: Dict[str, str] = {
+    data: dict[str, str] = {
         "grant_type": "authorization_code",
         "client_id": client_id,
         "code": code,
@@ -82,14 +88,14 @@ async def client_credentials_grant(
     token_url: str,
     client_id: str,
     client_secret: str,
-    scope: Optional[str] = None,
-    extra_params: Optional[Dict[str, str]] = None,
+    scope: str | None = None,
+    extra_params: dict[str, str] | None = None,
 ) -> OAuthTokenResult:
     """Obtain a token using Client Credentials grant."""
     if httpx is None:
         return OAuthTokenResult(success=False, error="httpx not installed")
 
-    data: Dict[str, str] = {
+    data: dict[str, str] = {
         "grant_type": "client_credentials",
         "client_id": client_id,
         "client_secret": client_secret,
@@ -107,15 +113,15 @@ async def password_grant(
     client_id: str,
     username: str,
     password: str,
-    client_secret: Optional[str] = None,
-    scope: Optional[str] = None,
-    extra_params: Optional[Dict[str, str]] = None,
+    client_secret: str | None = None,
+    scope: str | None = None,
+    extra_params: dict[str, str] | None = None,
 ) -> OAuthTokenResult:
     """Obtain a token using Resource Owner Password Credentials grant."""
     if httpx is None:
         return OAuthTokenResult(success=False, error="httpx not installed")
 
-    data: Dict[str, str] = {
+    data: dict[str, str] = {
         "grant_type": "password",
         "client_id": client_id,
         "username": username,
@@ -135,14 +141,14 @@ async def refresh_token_grant(
     token_url: str,
     client_id: str,
     refresh_token: str,
-    client_secret: Optional[str] = None,
-    scope: Optional[str] = None,
+    client_secret: str | None = None,
+    scope: str | None = None,
 ) -> OAuthTokenResult:
     """Refresh an expired access_token using a refresh_token."""
     if httpx is None:
         return OAuthTokenResult(success=False, error="httpx not installed")
 
-    data: Dict[str, str] = {
+    data: dict[str, str] = {
         "grant_type": "refresh_token",
         "client_id": client_id,
         "refresh_token": refresh_token,
@@ -159,16 +165,16 @@ def build_authorization_url(
     auth_url: str,
     client_id: str,
     redirect_uri: str,
-    scope: Optional[str] = None,
-    state: Optional[str] = None,
-    code_challenge: Optional[str] = None,
+    scope: str | None = None,
+    state: str | None = None,
+    code_challenge: str | None = None,
     response_type: str = "code",
-    extra_params: Optional[Dict[str, str]] = None,
+    extra_params: dict[str, str] | None = None,
 ) -> str:
     """Build the authorization URL for Auth Code / Auth Code + PKCE flow."""
-    from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
+    from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-    params: Dict[str, str] = {
+    params: dict[str, str] = {
         "response_type": response_type,
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -195,7 +201,8 @@ def build_authorization_url(
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
-async def _post_token_request(token_url: str, data: Dict[str, str]) -> OAuthTokenResult:
+
+async def _post_token_request(token_url: str, data: dict[str, str]) -> OAuthTokenResult:
     """POST to a token endpoint and parse the response."""
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -205,7 +212,11 @@ async def _post_token_request(token_url: str, data: Dict[str, str]) -> OAuthToke
                 headers={"Accept": "application/json"},
             )
 
-        body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+        body = (
+            resp.json()
+            if resp.headers.get("content-type", "").startswith("application/json")
+            else {}
+        )
 
         if resp.is_success and "access_token" in body:
             return OAuthTokenResult(

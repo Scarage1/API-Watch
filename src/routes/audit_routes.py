@@ -2,19 +2,20 @@
 Audit log routes — system-wide observability for auth, security, and admin events.
 Admin-only access with filtering, pagination, and stats.
 """
-from typing import Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import select, desc, func
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import User, AuditLog, AuditCategory
 from ..jwt_auth import get_current_user
+from ..models import AuditLog, User
 
 router = APIRouter(prefix="/audit", tags=["Audit"])
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 async def _require_admin(user: User, db: AsyncSession) -> None:
     """Raise 403 if user is not an org admin/owner.
@@ -42,12 +43,15 @@ def _log_to_dict(log: AuditLog) -> dict:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @router.get("")
 async def list_audit_logs(
-    category: Optional[str] = Query(None, description="Filter by category (auth/security/admin/data/system)"),
-    action: Optional[str] = Query(None, description="Filter by action name"),
-    severity: Optional[str] = Query(None, description="Filter by severity (info/warning/critical)"),
-    user_id: Optional[str] = Query(None, description="Filter by actor user ID"),
+    category: str | None = Query(
+        None, description="Filter by category (auth/security/admin/data/system)"
+    ),
+    action: str | None = Query(None, description="Filter by action name"),
+    severity: str | None = Query(None, description="Filter by severity (info/warning/critical)"),
+    user_id: str | None = Query(None, description="Filter by actor user ID"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
@@ -86,8 +90,7 @@ async def audit_stats(
     cat_q = select(AuditLog.category, func.count()).group_by(AuditLog.category)
     cat_result = await db.execute(cat_q)
     by_category = {
-        (row[0].value if hasattr(row[0], "value") else row[0]): row[1]
-        for row in cat_result.all()
+        (row[0].value if hasattr(row[0], "value") else row[0]): row[1] for row in cat_result.all()
     }
 
     # Severity counts

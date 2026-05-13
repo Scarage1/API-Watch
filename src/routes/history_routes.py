@@ -1,14 +1,14 @@
 """
 Request History routes — list, search, clear.
 """
-from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, delete
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import User, RequestHistory
 from ..jwt_auth import get_current_user
+from ..models import RequestHistory, User
 
 router = APIRouter(prefix="/history", tags=["History"])
 
@@ -19,10 +19,10 @@ async def list_history(
     db: AsyncSession = Depends(get_db),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    method: Optional[str] = Query(None),
-    status_code: Optional[int] = Query(None),
-    success: Optional[bool] = Query(None),
-    search: Optional[str] = Query(None),
+    method: str | None = Query(None),
+    status_code: int | None = Query(None),
+    success: bool | None = Query(None),
+    search: str | None = Query(None),
 ):
     """List request history with filters."""
     query = select(RequestHistory).where(RequestHistory.owner_id == user.id)
@@ -78,9 +78,7 @@ async def get_history_stats(
         await db.execute(
             select(
                 func.count().label("total"),
-                func.count()
-                .filter(RequestHistory.success == True)
-                .label("successful"),
+                func.count().filter(RequestHistory.success).label("successful"),
                 func.avg(RequestHistory.response_time).label("avg_time"),
             ).where(owner_filter)
         )
@@ -139,7 +137,5 @@ async def clear_history(
     db: AsyncSession = Depends(get_db),
 ):
     """Clear all request history for the current user."""
-    await db.execute(
-        delete(RequestHistory).where(RequestHistory.owner_id == user.id)
-    )
+    await db.execute(delete(RequestHistory).where(RequestHistory.owner_id == user.id))
     await db.commit()

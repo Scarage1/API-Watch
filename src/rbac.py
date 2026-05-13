@@ -7,10 +7,10 @@ Provides FastAPI dependencies for:
   - require_org_role(min_role) — checks org-level role.
   - get_workspace_id — extracts & validates the workspace header.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select
@@ -19,8 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
 from .jwt_auth import get_current_user
 from .models import (
-    User, Workspace, WorkspaceMember, WorkspaceRole,
-    Organization, TeamMember, OrgRole,
+    Organization,
+    OrgRole,
+    TeamMember,
+    User,
+    Workspace,
+    WorkspaceMember,
+    WorkspaceRole,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,9 +46,10 @@ _ORG_ROLE_RANK = {
 
 # ── Workspace-level dependencies ─────────────────────────────────────────────
 
+
 async def get_workspace_id(
-    x_workspace_id: Optional[str] = Header(None),
-) -> Optional[str]:
+    x_workspace_id: str | None = Header(None),
+) -> str | None:
     """Extract workspace ID from the X-Workspace-Id header.
     Returns None if not provided (backward compat for personal scope).
     """
@@ -51,15 +57,13 @@ async def get_workspace_id(
 
 
 async def resolve_workspace(
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
-) -> Optional[Workspace]:
+) -> Workspace | None:
     """Resolve workspace object. Returns None when no header is sent."""
     if workspace_id is None:
         return None
-    result = await db.execute(
-        select(Workspace).where(Workspace.id == workspace_id)
-    )
+    result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     ws = result.scalar_one_or_none()
     if ws is None:
         raise HTTPException(
@@ -81,9 +85,10 @@ def require_workspace_access(min_role: WorkspaceRole = WorkspaceRole.VIEWER):
         ):
             ...
     """
+
     async def _dep(
         user: User = Depends(get_current_user),
-        workspace_id: Optional[str] = Depends(get_workspace_id),
+        workspace_id: str | None = Depends(get_workspace_id),
         db: AsyncSession = Depends(get_db),
     ) -> WorkspaceMember:
         if workspace_id is None:
@@ -119,18 +124,19 @@ def require_workspace_access(min_role: WorkspaceRole = WorkspaceRole.VIEWER):
 
 # ── Organization-level dependencies ──────────────────────────────────────────
 
+
 def require_org_role(org_id_param: str = "org_id", min_role: OrgRole = OrgRole.MEMBER):
     """
     Factory returning a dependency that checks the user has at least `min_role`
     in the organization whose ID comes from the path parameter `org_id_param`.
     The org owner always passes.
     """
+
     async def _dep(
         user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
         **kwargs,
     ) -> Organization:
-        from fastapi import Request
         # We cannot use **kwargs with Depends cleanly, so we'll make
         # a self-contained check that receives the org_id explicitly.
         raise NotImplementedError("Use check_org_role directly")
@@ -149,9 +155,7 @@ async def check_org_access(
     The org owner automatically satisfies any role check.
     Returns the Organization object on success.
     """
-    result = await db.execute(
-        select(Organization).where(Organization.id == org_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
     if org is None:
         raise HTTPException(

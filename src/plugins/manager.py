@@ -17,23 +17,25 @@ Design:
   - The PluginManager dispatches events to all registered hooks
   - Hooks are async-first but support sync functions via auto-wrapping
 """
+
 from __future__ import annotations
 
 import asyncio
 import importlib
 import importlib.util
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 # ── Hook Types ────────────────────────────────────────────────
-class HookType(str, Enum):
+class HookType(StrEnum):
     PRE_REQUEST = "pre_request"
     POST_RESPONSE = "post_response"
     ON_ERROR = "on_error"
@@ -46,21 +48,23 @@ class HookType(str, Enum):
 @dataclass
 class PluginInfo:
     """Metadata about a registered plugin."""
+
     name: str
     version: str = "1.0.0"
     description: str = ""
     author: str = ""
-    hooks: List[HookType] = field(default_factory=list)
+    hooks: list[HookType] = field(default_factory=list)
     enabled: bool = True
 
 
 # ── Hook Signatures ──────────────────────────────────────────
-HookFn = Callable[..., Union[Any, Awaitable[Any]]]
+HookFn = Callable[..., Any | Awaitable[Any]]
 
 
 @dataclass
 class RegisteredHook:
     """A hook function registered by a plugin."""
+
     hook_type: HookType
     plugin_name: str
     fn: HookFn
@@ -88,7 +92,7 @@ class Plugin(ABC):
 
     info: PluginInfo
 
-    async def pre_request(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    async def pre_request(self, config: dict[str, Any]) -> dict[str, Any]:
         """Called before each request. Return modified config."""
         return config
 
@@ -96,7 +100,7 @@ class Plugin(ABC):
         """Called after each response. Return modified result."""
         return result
 
-    async def on_error(self, error: Exception, context: Dict[str, Any]) -> None:
+    async def on_error(self, error: Exception, context: dict[str, Any]) -> None:
         """Called when a request fails."""
         pass
 
@@ -121,11 +125,11 @@ class PluginManager:
     """
 
     def __init__(self):
-        self._plugins: Dict[str, Plugin] = {}
-        self._hooks: Dict[HookType, List[RegisteredHook]] = {h: [] for h in HookType}
+        self._plugins: dict[str, Plugin] = {}
+        self._hooks: dict[HookType, list[RegisteredHook]] = {h: [] for h in HookType}
 
     @property
-    def plugins(self) -> Dict[str, PluginInfo]:
+    def plugins(self) -> dict[str, PluginInfo]:
         """Return info about all registered plugins."""
         return {name: p.info for name, p in self._plugins.items()}
 
@@ -159,7 +163,12 @@ class PluginManager:
                 )
                 plugin.info.hooks.append(hook_type)
 
-        logger.info("Plugin registered: %s v%s (%d hooks)", name, plugin.info.version, len(plugin.info.hooks))
+        logger.info(
+            "Plugin registered: %s v%s (%d hooks)",
+            name,
+            plugin.info.version,
+            len(plugin.info.hooks),
+        )
 
     def unregister(self, name: str) -> bool:
         """Unregister a plugin by name."""
@@ -168,9 +177,7 @@ class PluginManager:
 
         # Remove all hooks for this plugin
         for hook_type in HookType:
-            self._hooks[hook_type] = [
-                h for h in self._hooks[hook_type] if h.plugin_name != name
-            ]
+            self._hooks[hook_type] = [h for h in self._hooks[hook_type] if h.plugin_name != name]
 
         del self._plugins[name]
         logger.info("Plugin unregistered: %s", name)
@@ -178,7 +185,7 @@ class PluginManager:
 
     # ── Hook Dispatchers ──────────────────────────────────────
 
-    async def dispatch_pre_request(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    async def dispatch_pre_request(self, config: dict[str, Any]) -> dict[str, Any]:
         """Run all pre_request hooks in order. Returns modified config."""
         for hook in sorted(self._hooks[HookType.PRE_REQUEST], key=lambda h: h.priority):
             try:
@@ -204,7 +211,7 @@ class PluginManager:
                 logger.error("Plugin '%s' post_response hook failed: %s", hook.plugin_name, e)
         return result
 
-    async def dispatch_on_error(self, error: Exception, context: Dict[str, Any]) -> None:
+    async def dispatch_on_error(self, error: Exception, context: dict[str, Any]) -> None:
         """Notify all on_error hooks."""
         for hook in self._hooks[HookType.ON_ERROR]:
             try:
@@ -236,7 +243,7 @@ class PluginManager:
 
     # ── Plugin Loading ────────────────────────────────────────
 
-    def load_from_directory(self, directory: Union[str, Path]) -> int:
+    def load_from_directory(self, directory: str | Path) -> int:
         """
         Load all plugins from a directory.
         Each .py file should have a `register(manager)` function.
@@ -293,7 +300,7 @@ class PluginManager:
 # ── Global singleton ──────────────────────────────────────────
 import os
 
-_manager: Optional[PluginManager] = None
+_manager: PluginManager | None = None
 
 
 def get_plugin_manager() -> PluginManager:

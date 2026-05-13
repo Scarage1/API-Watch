@@ -9,23 +9,26 @@ Validates saved requests and collections against configurable rules:
 - Header requirements (specific headers required)
 - Body validation (max size, must have Content-Type)
 """
-import re
+
 import logging
-from typing import Optional, List, Dict, Any
+import re
 from dataclasses import dataclass, field
+from typing import Any
 
 logger = logging.getLogger("apiwatch.governance")
 
 
 # ── Rule definitions ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class GovernanceRule:
     """A governance rule definition."""
+
     id: str
     name: str
-    category: str    # naming, security, consistency, performance
-    severity: str    # error, warning, info
+    category: str  # naming, security, consistency, performance
+    severity: str  # error, warning, info
     description: str
     enabled: bool = True
 
@@ -33,6 +36,7 @@ class GovernanceRule:
 @dataclass
 class RuleViolation:
     """A single governance rule violation."""
+
     rule_id: str
     rule_name: str
     severity: str
@@ -56,7 +60,8 @@ class RuleViolation:
 @dataclass
 class GovernanceReport:
     """Result of running all governance rules."""
-    violations: List[RuleViolation] = field(default_factory=list)
+
+    violations: list[RuleViolation] = field(default_factory=list)
     rules_checked: int = 0
     passed: int = 0
     warnings: int = 0
@@ -83,7 +88,7 @@ class GovernanceReport:
 
 # ── Built-in rules ───────────────────────────────────────────────────────────
 
-BUILTIN_RULES: List[GovernanceRule] = [
+BUILTIN_RULES: list[GovernanceRule] = [
     GovernanceRule(
         id="naming_collection_lowercase",
         name="Collection names should be descriptive",
@@ -156,16 +161,17 @@ BUILTIN_RULES: List[GovernanceRule] = [
     ),
 ]
 
-_UPPER_SNAKE_RE = re.compile(r'^[A-Z][A-Z0-9_]*$')
+_UPPER_SNAKE_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _LOCALHOST_PATTERNS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 
 
 # ── Rule checker ─────────────────────────────────────────────────────────────
 
+
 class GovernanceChecker:
     """Evaluates API governance rules against requests and collections."""
 
-    def __init__(self, rules: Optional[List[GovernanceRule]] = None):
+    def __init__(self, rules: list[GovernanceRule] | None = None):
         self.rules = {r.id: r for r in (rules or BUILTIN_RULES)}
 
     def _is_enabled(self, rule_id: str) -> bool:
@@ -203,9 +209,9 @@ class GovernanceChecker:
         name: str,
         method: str,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
-        body: Optional[Any] = None,
-        auth_config: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
+        body: Any | None = None,
+        auth_config: dict[str, str] | None = None,
     ) -> GovernanceReport:
         """Check a single request against all enabled rules."""
         report = GovernanceReport()
@@ -216,9 +222,13 @@ class GovernanceChecker:
         if self._is_enabled("naming_request_has_name"):
             report.rules_checked += 1
             if not name or len(name.strip()) < 2:
-                self._add_violation(report, "naming_request_has_name",
+                self._add_violation(
+                    report,
+                    "naming_request_has_name",
                     "Request has no name or name is too short",
-                    "request", name or "(unnamed)")
+                    "request",
+                    name or "(unnamed)",
+                )
             else:
                 report.passed += 1
 
@@ -228,9 +238,13 @@ class GovernanceChecker:
             # Allow root "/" but not "/api/users/"
             stripped = url.split("?")[0].rstrip("/")
             if url.split("?")[0] != stripped and url.split("?")[0] != "/":
-                self._add_violation(report, "naming_url_no_trailing_slash",
+                self._add_violation(
+                    report,
+                    "naming_url_no_trailing_slash",
                     f"URL ends with trailing slash: {url}",
-                    "request", name or url)
+                    "request",
+                    name or url,
+                )
             else:
                 report.passed += 1
 
@@ -238,9 +252,13 @@ class GovernanceChecker:
         if self._is_enabled("security_https_required"):
             report.rules_checked += 1
             if url.startswith("http://"):
-                self._add_violation(report, "security_https_required",
+                self._add_violation(
+                    report,
+                    "security_https_required",
                     f"URL uses HTTP instead of HTTPS: {url[:60]}",
-                    "request", name or url)
+                    "request",
+                    name or url,
+                )
             else:
                 report.passed += 1
 
@@ -248,12 +266,17 @@ class GovernanceChecker:
         if self._is_enabled("security_no_localhost"):
             report.rules_checked += 1
             from urllib.parse import urlparse
+
             parsed = urlparse(url)
             host = (parsed.hostname or "").lower()
             if host in _LOCALHOST_PATTERNS:
-                self._add_violation(report, "security_no_localhost",
+                self._add_violation(
+                    report,
+                    "security_no_localhost",
                     f"URL targets localhost: {host}",
-                    "request", name or url)
+                    "request",
+                    name or url,
+                )
             else:
                 report.passed += 1
 
@@ -266,9 +289,13 @@ class GovernanceChecker:
                 or (auth_config and any(auth_config.values()))
             )
             if not has_auth:
-                self._add_violation(report, "security_auth_required",
+                self._add_violation(
+                    report,
+                    "security_auth_required",
                     "No authentication configured",
-                    "request", name or url)
+                    "request",
+                    name or url,
+                )
             else:
                 report.passed += 1
 
@@ -277,9 +304,13 @@ class GovernanceChecker:
             if method.upper() in ("POST", "PUT", "PATCH"):
                 report.rules_checked += 1
                 if "content-type" not in headers_lower and body:
-                    self._add_violation(report, "consistency_content_type",
+                    self._add_violation(
+                        report,
+                        "consistency_content_type",
                         f"{method.upper()} request has body but no Content-Type header",
-                        "request", name or url)
+                        "request",
+                        name or url,
+                    )
                 else:
                     report.passed += 1
 
@@ -287,9 +318,13 @@ class GovernanceChecker:
         if self._is_enabled("consistency_accept_header"):
             report.rules_checked += 1
             if "accept" not in headers_lower:
-                self._add_violation(report, "consistency_accept_header",
+                self._add_violation(
+                    report,
+                    "consistency_accept_header",
                     "No Accept header specified",
-                    "request", name or url)
+                    "request",
+                    name or url,
+                )
             else:
                 report.passed += 1
 
@@ -298,7 +333,7 @@ class GovernanceChecker:
     def check_collection(
         self,
         name: str,
-        requests: Optional[List[dict]] = None,
+        requests: list[dict] | None = None,
     ) -> GovernanceReport:
         """Check a collection and all its requests."""
         report = GovernanceReport()
@@ -307,14 +342,18 @@ class GovernanceChecker:
         if self._is_enabled("naming_collection_lowercase"):
             report.rules_checked += 1
             if not name or len(name.strip()) < 3:
-                self._add_violation(report, "naming_collection_lowercase",
+                self._add_violation(
+                    report,
+                    "naming_collection_lowercase",
                     f"Collection name too short: '{name}'",
-                    "collection", name or "(unnamed)")
+                    "collection",
+                    name or "(unnamed)",
+                )
             else:
                 report.passed += 1
 
         # Check each request
-        for req in (requests or []):
+        for req in requests or []:
             req_report = self.check_request(
                 name=req.get("name", ""),
                 method=req.get("method", "GET"),
@@ -333,7 +372,7 @@ class GovernanceChecker:
 
     def check_environment(
         self,
-        variables: Dict[str, str],
+        variables: dict[str, str],
         env_name: str = "environment",
     ) -> GovernanceReport:
         """Check environment variable naming conventions."""
@@ -343,15 +382,19 @@ class GovernanceChecker:
             for key in variables:
                 report.rules_checked += 1
                 if not _UPPER_SNAKE_RE.match(key):
-                    self._add_violation(report, "naming_env_uppercase",
+                    self._add_violation(
+                        report,
+                        "naming_env_uppercase",
                         f"Variable '{key}' is not UPPER_SNAKE_CASE",
-                        "environment", env_name)
+                        "environment",
+                        env_name,
+                    )
                 else:
                     report.passed += 1
 
         return report
 
-    def get_rules(self) -> List[dict]:
+    def get_rules(self) -> list[dict]:
         """Return all rules as dicts (for the settings UI)."""
         return [
             {

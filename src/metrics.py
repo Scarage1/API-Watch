@@ -10,11 +10,11 @@ Exposes key performance indicators:
 
 Designed for scraping by Prometheus/Grafana/Datadog.
 """
-import time
+
 import threading
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -27,10 +27,23 @@ router = APIRouter(tags=["metrics"])
 class Histogram:
     """Simple histogram for latency tracking."""
 
-    buckets: List[float] = field(
-        default_factory=lambda: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+    buckets: list[float] = field(
+        default_factory=lambda: [
+            0.001,
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.1,
+            0.25,
+            0.5,
+            1.0,
+            2.5,
+            5.0,
+            10.0,
+        ]
     )
-    _counts: Dict[float, int] = field(default_factory=lambda: defaultdict(int))
+    _counts: dict[float, int] = field(default_factory=lambda: defaultdict(int))
     _sum: float = 0.0
     _count: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -67,9 +80,9 @@ class MetricsRegistry:
     def __init__(self):
         self._lock = threading.Lock()
         # HTTP metrics
-        self.http_requests_total: Dict[str, int] = defaultdict(int)
+        self.http_requests_total: dict[str, int] = defaultdict(int)
         self.http_request_duration = Histogram()
-        self.http_errors_total: Dict[int, int] = defaultdict(int)
+        self.http_errors_total: dict[int, int] = defaultdict(int)
         # API execution metrics
         self.api_executions_total = 0
         self.api_execution_duration = Histogram()
@@ -116,24 +129,24 @@ class MetricsRegistry:
 
     def to_prometheus(self) -> str:
         """Render metrics in Prometheus exposition format."""
-        lines: List[str] = []
+        lines: list[str] = []
 
         # Uptime
         uptime = time.time() - self.start_time
-        lines.append(f"# HELP apiwatch_uptime_seconds Time since server start")
-        lines.append(f"# TYPE apiwatch_uptime_seconds gauge")
+        lines.append("# HELP apiwatch_uptime_seconds Time since server start")
+        lines.append("# TYPE apiwatch_uptime_seconds gauge")
         lines.append(f"apiwatch_uptime_seconds {uptime:.2f}")
         lines.append("")
 
         # Active connections
-        lines.append(f"# HELP apiwatch_active_connections Current active HTTP connections")
-        lines.append(f"# TYPE apiwatch_active_connections gauge")
+        lines.append("# HELP apiwatch_active_connections Current active HTTP connections")
+        lines.append("# TYPE apiwatch_active_connections gauge")
         lines.append(f"apiwatch_active_connections {self.active_connections}")
         lines.append("")
 
         # HTTP request totals
-        lines.append(f"# HELP apiwatch_http_requests_total Total HTTP requests")
-        lines.append(f"# TYPE apiwatch_http_requests_total counter")
+        lines.append("# HELP apiwatch_http_requests_total Total HTTP requests")
+        lines.append("# TYPE apiwatch_http_requests_total counter")
         for key, count in sorted(self.http_requests_total.items()):
             method, path, status = key.split(":", 2)
             lines.append(
@@ -143,46 +156,54 @@ class MetricsRegistry:
 
         # HTTP latency histogram
         hist = self.http_request_duration
-        lines.append(f"# HELP apiwatch_http_request_duration_seconds HTTP request latency")
-        lines.append(f"# TYPE apiwatch_http_request_duration_seconds histogram")
+        lines.append("# HELP apiwatch_http_request_duration_seconds HTTP request latency")
+        lines.append("# TYPE apiwatch_http_request_duration_seconds histogram")
         cumulative = 0
         for bucket in hist.buckets:
             cumulative += hist._counts.get(bucket, 0)
-            lines.append(f'apiwatch_http_request_duration_seconds_bucket{{le="{bucket}"}} {cumulative}')
+            lines.append(
+                f'apiwatch_http_request_duration_seconds_bucket{{le="{bucket}"}} {cumulative}'
+            )
         lines.append(f'apiwatch_http_request_duration_seconds_bucket{{le="+Inf"}} {hist._count}')
         lines.append(f"apiwatch_http_request_duration_seconds_sum {hist._sum:.6f}")
         lines.append(f"apiwatch_http_request_duration_seconds_count {hist._count}")
         lines.append("")
 
         # Latency percentiles (convenience gauges)
-        lines.append(f"# HELP apiwatch_http_latency_p50_seconds P50 HTTP latency")
-        lines.append(f"# TYPE apiwatch_http_latency_p50_seconds gauge")
+        lines.append("# HELP apiwatch_http_latency_p50_seconds P50 HTTP latency")
+        lines.append("# TYPE apiwatch_http_latency_p50_seconds gauge")
         lines.append(f"apiwatch_http_latency_p50_seconds {hist.percentile(0.50):.6f}")
-        lines.append(f"# HELP apiwatch_http_latency_p95_seconds P95 HTTP latency")
-        lines.append(f"# TYPE apiwatch_http_latency_p95_seconds gauge")
+        lines.append("# HELP apiwatch_http_latency_p95_seconds P95 HTTP latency")
+        lines.append("# TYPE apiwatch_http_latency_p95_seconds gauge")
         lines.append(f"apiwatch_http_latency_p95_seconds {hist.percentile(0.95):.6f}")
-        lines.append(f"# HELP apiwatch_http_latency_p99_seconds P99 HTTP latency")
-        lines.append(f"# TYPE apiwatch_http_latency_p99_seconds gauge")
+        lines.append("# HELP apiwatch_http_latency_p99_seconds P99 HTTP latency")
+        lines.append("# TYPE apiwatch_http_latency_p99_seconds gauge")
         lines.append(f"apiwatch_http_latency_p99_seconds {hist.percentile(0.99):.6f}")
         lines.append("")
 
         # API execution metrics
-        lines.append(f"# HELP apiwatch_api_executions_total Total API test executions")
-        lines.append(f"# TYPE apiwatch_api_executions_total counter")
+        lines.append("# HELP apiwatch_api_executions_total Total API test executions")
+        lines.append("# TYPE apiwatch_api_executions_total counter")
         lines.append(f"apiwatch_api_executions_total {self.api_executions_total}")
-        lines.append(f"# HELP apiwatch_api_execution_errors_total Failed API executions")
-        lines.append(f"# TYPE apiwatch_api_execution_errors_total counter")
+        lines.append("# HELP apiwatch_api_execution_errors_total Failed API executions")
+        lines.append("# TYPE apiwatch_api_execution_errors_total counter")
         lines.append(f"apiwatch_api_execution_errors_total {self.api_execution_errors}")
         lines.append("")
 
         # API execution latency
         api_hist = self.api_execution_duration
         if api_hist._count > 0:
-            lines.append(f"# HELP apiwatch_api_execution_duration_seconds API execution latency")
-            lines.append(f"# TYPE apiwatch_api_execution_duration_seconds summary")
-            lines.append(f'apiwatch_api_execution_duration_seconds{{quantile="0.5"}} {api_hist.percentile(0.50):.6f}')
-            lines.append(f'apiwatch_api_execution_duration_seconds{{quantile="0.95"}} {api_hist.percentile(0.95):.6f}')
-            lines.append(f'apiwatch_api_execution_duration_seconds{{quantile="0.99"}} {api_hist.percentile(0.99):.6f}')
+            lines.append("# HELP apiwatch_api_execution_duration_seconds API execution latency")
+            lines.append("# TYPE apiwatch_api_execution_duration_seconds summary")
+            lines.append(
+                f'apiwatch_api_execution_duration_seconds{{quantile="0.5"}} {api_hist.percentile(0.50):.6f}'
+            )
+            lines.append(
+                f'apiwatch_api_execution_duration_seconds{{quantile="0.95"}} {api_hist.percentile(0.95):.6f}'
+            )
+            lines.append(
+                f'apiwatch_api_execution_duration_seconds{{quantile="0.99"}} {api_hist.percentile(0.99):.6f}'
+            )
             lines.append(f"apiwatch_api_execution_duration_seconds_sum {api_hist._sum:.6f}")
             lines.append(f"apiwatch_api_execution_duration_seconds_count {api_hist._count}")
             lines.append("")

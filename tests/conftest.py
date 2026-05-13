@@ -1,8 +1,9 @@
 """
 Shared pytest fixtures and configuration.
 """
-import sys
+
 import os
+import sys
 from pathlib import Path
 
 # Ensure project root is importable
@@ -22,19 +23,19 @@ os.environ["REDIS_URL"] = ""
 os.environ["STORAGE_BACKEND"] = "filesystem"
 os.environ["STORAGE_ROOT"] = "/tmp/apiwatch-test-storage"
 
+import asyncio
+
 import pytest
 import pytest_asyncio
-import asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 # Reset singletons before importing the app (so config picks up test env vars)
 from src.config import get_settings
+
 get_settings.cache_clear()
 
-from src.database import Base, _get_engine
-from src.cache import reset_cache
-from src.storage import reset_storage
 from src.api_server import app
+from src.database import Base, _get_engine
 
 
 @pytest.fixture(scope="session")
@@ -56,6 +57,7 @@ async def setup_db():
         await conn.run_sync(Base.metadata.drop_all)
     # Reset cache between tests to clear blacklisted tokens etc.
     from src.cache import get_cache
+
     cache = get_cache()
     await cache.flushdb()
 

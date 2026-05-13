@@ -7,22 +7,24 @@ Endpoints:
   /api/v1/enterprise/compliance    — Compliance report generation
   /api/v1/enterprise/collaboration — Collaboration stats & WebSocket
 """
+
 from __future__ import annotations
 
 import json
 import logging
-import time
-from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from .sso import SSOProvider, SSOStatus, SSOConfig, get_sso_service
 from .audit import (
-    AuditEvent, AuditSeverity, AuditService, ComplianceFramework,
-    RetentionPolicy, get_audit_service,
+    AuditEvent,
+    AuditSeverity,
+    ComplianceFramework,
+    RetentionPolicy,
+    get_audit_service,
 )
 from .collaboration import get_collaboration_hub
+from .sso import SSOConfig, SSOProvider, SSOStatus, get_sso_service
 
 logger = logging.getLogger("apiwatch.enterprise.routes")
 
@@ -31,12 +33,14 @@ router = APIRouter(prefix="/api/v1/enterprise", tags=["enterprise"])
 
 # ── Request/Response Models ───────────────────────────────────
 
+
 class SSOConfigRequest(BaseModel):
     """Request to create/update SSO configuration."""
+
     organization_id: str
     provider: str = "oidc"  # "saml" or "oidc"
     display_name: str = ""
-    allowed_domains: List[str] = []
+    allowed_domains: list[str] = []
     enforce_sso: bool = False
     auto_create_users: bool = True
     default_role: str = "member"
@@ -49,50 +53,56 @@ class SSOConfigRequest(BaseModel):
     oidc_client_id: str = ""
     oidc_client_secret: str = ""
     oidc_issuer_url: str = ""
-    oidc_scopes: List[str] = ["openid", "email", "profile"]
+    oidc_scopes: list[str] = ["openid", "email", "profile"]
     oidc_redirect_uri: str = ""
 
 
 class SSOLoginRequest(BaseModel):
     """Request to initiate SSO login."""
+
     organization_id: str
     redirect_url: str = "/"
 
 
 class SSOCallbackRequest(BaseModel):
     """SSO callback parameters."""
+
     state: str
-    code: str = ""          # OIDC authorization code
+    code: str = ""  # OIDC authorization code
     SAMLResponse: str = ""  # SAML response
 
 
 class AuditSearchRequest(BaseModel):
     """Audit log search parameters."""
-    organization_id: Optional[str] = None
-    category: Optional[str] = None
-    action: Optional[str] = None
-    user_id: Optional[str] = None
-    severity: Optional[str] = None
-    start_time: Optional[float] = None
-    end_time: Optional[float] = None
+
+    organization_id: str | None = None
+    category: str | None = None
+    action: str | None = None
+    user_id: str | None = None
+    severity: str | None = None
+    start_time: float | None = None
+    end_time: float | None = None
     limit: int = Field(default=50, le=500)
     offset: int = 0
 
 
 class ComplianceReportRequest(BaseModel):
     """Request to generate a compliance report."""
+
     organization_id: str
     framework: str  # soc2, gdpr, hipaa, iso27001
 
 
 class RetentionPolicyRequest(BaseModel):
     """Request to set data retention policy."""
+
     policy: str  # 30d, 90d, 365d, unlimited
 
 
 # ══════════════════════════════════════════════════════════════
 # SSO Routes
 # ══════════════════════════════════════════════════════════════
+
 
 @router.get("/sso/{organization_id}")
 async def get_sso_config(organization_id: str):
@@ -138,14 +148,16 @@ async def configure_sso(request: SSOConfigRequest):
 
     # Log audit event
     audit = get_audit_service()
-    await audit.log(AuditEvent(
-        category="admin",
-        action="sso_configured",
-        severity=AuditSeverity.INFO,
-        resource_type="organization",
-        resource_id=request.organization_id,
-        details={"provider": provider.value, "enforce_sso": request.enforce_sso},
-    ))
+    await audit.log(
+        AuditEvent(
+            category="admin",
+            action="sso_configured",
+            severity=AuditSeverity.INFO,
+            resource_type="organization",
+            resource_id=request.organization_id,
+            details={"provider": provider.value, "enforce_sso": request.enforce_sso},
+        )
+    )
 
     return {"status": "configured", "provider": provider.value, **config.to_dict()}
 
@@ -162,14 +174,16 @@ async def activate_sso(organization_id: str):
     sso.register_config(config)
 
     audit = get_audit_service()
-    await audit.log(AuditEvent(
-        category="admin",
-        action="sso_activated",
-        severity=AuditSeverity.WARNING,
-        resource_type="organization",
-        resource_id=organization_id,
-        details={"enforce_sso": config.enforce_sso},
-    ))
+    await audit.log(
+        AuditEvent(
+            category="admin",
+            action="sso_activated",
+            severity=AuditSeverity.WARNING,
+            resource_type="organization",
+            resource_id=organization_id,
+            details={"enforce_sso": config.enforce_sso},
+        )
+    )
 
     return {"status": "active", "organization_id": organization_id}
 
@@ -203,13 +217,15 @@ async def sso_callback(request: SSOCallbackRequest):
         user = await sso.process_callback(state=request.state, params=params)
 
         audit = get_audit_service()
-        await audit.log(AuditEvent(
-            category="auth",
-            action="sso_login",
-            severity=AuditSeverity.INFO,
-            user_email=user.email,
-            details={"provider_id": user.provider_id, "groups": user.groups},
-        ))
+        await audit.log(
+            AuditEvent(
+                category="auth",
+                action="sso_login",
+                severity=AuditSeverity.INFO,
+                user_email=user.email,
+                details={"provider_id": user.provider_id, "groups": user.groups},
+            )
+        )
 
         return {
             "status": "authenticated",
@@ -221,18 +237,21 @@ async def sso_callback(request: SSOCallbackRequest):
         }
     except ValueError as e:
         audit = get_audit_service()
-        await audit.log(AuditEvent(
-            category="auth",
-            action="sso_login_failed",
-            severity=AuditSeverity.WARNING,
-            details={"error": str(e)},
-        ))
+        await audit.log(
+            AuditEvent(
+                category="auth",
+                action="sso_login_failed",
+                severity=AuditSeverity.WARNING,
+                details={"error": str(e)},
+            )
+        )
         raise HTTPException(400, str(e))
 
 
 # ══════════════════════════════════════════════════════════════
 # Audit Routes
 # ══════════════════════════════════════════════════════════════
+
 
 @router.post("/audit/search")
 async def search_audit_logs(request: AuditSearchRequest):
@@ -270,8 +289,8 @@ async def search_audit_logs(request: AuditSearchRequest):
 async def export_audit_logs(
     organization_id: str,
     format: str = Query("json", regex="^(json|csv)$"),
-    start_time: Optional[float] = None,
-    end_time: Optional[float] = None,
+    start_time: float | None = None,
+    end_time: float | None = None,
 ):
     """Export audit logs in JSON or CSV format."""
     audit = get_audit_service()
@@ -299,7 +318,9 @@ async def set_retention_policy(request: RetentionPolicyRequest):
     try:
         policy = RetentionPolicy(request.policy)
     except ValueError:
-        raise HTTPException(400, f"Invalid policy: {request.policy}. Use: 30d, 90d, 365d, unlimited")
+        raise HTTPException(
+            400, f"Invalid policy: {request.policy}. Use: 30d, 90d, 365d, unlimited"
+        )
 
     audit.set_retention_policy(policy)
     return {"status": "updated", "policy": policy.value}
@@ -308,6 +329,7 @@ async def set_retention_policy(request: RetentionPolicyRequest):
 # ══════════════════════════════════════════════════════════════
 # Compliance Routes
 # ══════════════════════════════════════════════════════════════
+
 
 @router.post("/compliance/report")
 async def generate_compliance_report(request: ComplianceReportRequest):
@@ -318,8 +340,7 @@ async def generate_compliance_report(request: ComplianceReportRequest):
         framework = ComplianceFramework(request.framework)
     except ValueError:
         raise HTTPException(
-            400,
-            f"Invalid framework: {request.framework}. Use: soc2, gdpr, hipaa, iso27001"
+            400, f"Invalid framework: {request.framework}. Use: soc2, gdpr, hipaa, iso27001"
         )
 
     report = await audit.generate_compliance_report(
@@ -336,8 +357,16 @@ async def list_compliance_frameworks():
         "frameworks": [
             {"id": "soc2", "name": "SOC 2 Type II", "description": "Service Organization Controls"},
             {"id": "gdpr", "name": "GDPR", "description": "General Data Protection Regulation"},
-            {"id": "hipaa", "name": "HIPAA", "description": "Health Insurance Portability and Accountability Act"},
-            {"id": "iso27001", "name": "ISO 27001", "description": "Information Security Management"},
+            {
+                "id": "hipaa",
+                "name": "HIPAA",
+                "description": "Health Insurance Portability and Accountability Act",
+            },
+            {
+                "id": "iso27001",
+                "name": "ISO 27001",
+                "description": "Information Security Management",
+            },
         ]
     }
 
@@ -345,6 +374,7 @@ async def list_compliance_frameworks():
 # ══════════════════════════════════════════════════════════════
 # Collaboration Routes
 # ══════════════════════════════════════════════════════════════
+
 
 @router.get("/collaboration/stats")
 async def get_collaboration_stats():

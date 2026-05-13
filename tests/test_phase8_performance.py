@@ -5,19 +5,22 @@ Tests for:
   - httpx connection pooling (lazy init, reuse, close)
   - Report template extraction (file-based loading, caching)
 """
-import pytest
+
 import asyncio
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch
 
+import pytest
 
 # ── httpx connection pooling ─────────────────────────────────────────────────
+
 
 class TestConnectionPooling:
     """Verify the persistent AsyncClient lifecycle in APIRunner."""
 
     def _make_runner(self):
         from src.runner import APIRunner
+
         return APIRunner()
 
     def test_async_client_initially_none(self):
@@ -29,6 +32,7 @@ class TestConnectionPooling:
     def test_get_async_client_creates_client(self):
         """_get_async_client lazily creates a pooled httpx.AsyncClient."""
         import httpx
+
         runner = self._make_runner()
         client = runner._get_async_client()
         assert client is not None
@@ -77,6 +81,7 @@ class TestConnectionPooling:
     def test_pool_limits_configured(self):
         """Verify the pool has expected limits via the client's pool_limits."""
         import httpx
+
         runner = self._make_runner()
         client = runner._get_async_client()
         # Access the transport layer to verify pool limits
@@ -98,6 +103,7 @@ class TestConnectionPooling:
 
 
 # ── Report template extraction ───────────────────────────────────────────────
+
 
 class TestReportTemplateExtraction:
     """Verify report.html is loaded from file and cached."""
@@ -133,6 +139,7 @@ class TestReportTemplateExtraction:
     def test_get_html_template_returns_content(self):
         """_get_html_template() should return non-empty template string."""
         from src.report import _get_html_template
+
         content = _get_html_template()
         assert isinstance(content, str)
         assert len(content) > 1000  # Template is substantial
@@ -140,6 +147,7 @@ class TestReportTemplateExtraction:
     def test_get_html_template_caches(self):
         """Second call should return the cached value without re-reading."""
         import src.report as report_module
+
         # Reset cache
         report_module._HTML_TEMPLATE_CACHE = ""
 
@@ -180,12 +188,15 @@ class TestReportTemplateExtraction:
     def test_no_inline_html_template_constant(self):
         """Ensure there is no large HTML_TEMPLATE constant left in report.py."""
         import inspect
+
         import src.report as report_module
+
         source = inspect.getsource(report_module)
         assert "HTML_TEMPLATE = " not in source, "Leftover inline template found!"
 
 
 # ── Report JSON generation (regression) ──────────────────────────────────────
+
 
 class TestReportJSONRegression:
     """Ensure JSON report generation still works after template extraction."""
@@ -199,7 +210,7 @@ class TestReportJSONRegression:
             success=False,
             status_code=500,
             response_time=2.5,
-            response_body='Internal Server Error',
+            response_body="Internal Server Error",
             response_headers={},
             response_size=21,
             request_method="POST",
@@ -210,6 +221,7 @@ class TestReportJSONRegression:
         files = rg.generate([result], format="json")
         assert "json" in files
         import json
+
         json_path = Path(files["json"])
         data = json.loads(json_path.read_text(encoding="utf-8"))
         assert data["summary"]["failed"] == 1

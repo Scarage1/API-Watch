@@ -1,12 +1,12 @@
 """
 Notification sender — delivers alerts via email, webhook, or Slack.
 """
+
 import logging
-from typing import Optional
 
 import httpx
 
-from .models import NotificationChannel, ChannelType
+from .models import ChannelType, NotificationChannel
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,9 @@ async def send_notification(
 
 
 async def _send_webhook(
-    channel: NotificationChannel, subject: str, message: str,
+    channel: NotificationChannel,
+    subject: str,
+    message: str,
 ) -> bool:
     """Send notification via HTTP webhook."""
     config = channel.config
@@ -59,7 +61,9 @@ async def _send_webhook(
 
 
 async def _send_slack(
-    channel: NotificationChannel, subject: str, message: str,
+    channel: NotificationChannel,
+    subject: str,
+    message: str,
 ) -> bool:
     """Send notification via Slack incoming webhook."""
     config = channel.config
@@ -81,7 +85,9 @@ async def _send_slack(
 
 
 async def _send_email(
-    channel: NotificationChannel, subject: str, message: str,
+    channel: NotificationChannel,
+    subject: str,
+    message: str,
 ) -> bool:
     """Send email notification.
 
@@ -122,7 +128,5 @@ async def _send_email(
             return False
 
     # Fallback: log-only mode
-    logger.info(
-        f"[EMAIL] To: {recipients} | Subject: {subject}\n{message}"
-    )
+    logger.info(f"[EMAIL] To: {recipients} | Subject: {subject}\n{message}")
     return True

@@ -1,19 +1,27 @@
 """
 Authentication routes — register, login, refresh, profile, logout.
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy import select, or_
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import User, Workspace, WorkspaceMember, WorkspaceRole
 from ..jwt_auth import (
-    RegisterRequest, LoginRequest, TokenResponse, RefreshRequest,
-    hash_password, verify_password,
-    create_access_token, create_refresh_token, decode_token,
-    get_current_user, blacklist_token,
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+    blacklist_token,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    get_current_user,
+    hash_password,
+    verify_password,
 )
+from ..models import User, Workspace, WorkspaceMember, WorkspaceRole
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -22,9 +30,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """Create a new user account."""
     existing = await db.execute(
-        select(User).where(
-            or_(User.email == body.email, User.username == body.username)
-        )
+        select(User).where(or_(User.email == body.email, User.username == body.username))
     )
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -79,9 +85,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Authenticate and get tokens."""
     result = await db.execute(
-        select(User).where(
-            or_(User.username == body.username, User.email == body.username)
-        )
+        select(User).where(or_(User.username == body.username, User.email == body.username))
     )
     user = result.scalar_one_or_none()
 
@@ -178,6 +182,7 @@ async def logout(
     # Blacklist the token for its remaining lifetime
     exp = payload.get("exp", 0)
     import time
+
     remaining = max(int(exp - time.time()), 60)  # at least 60s
     await blacklist_token(jti, ttl=remaining)
     return {"detail": "Successfully logged out"}

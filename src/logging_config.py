@@ -3,17 +3,16 @@ Structured logging configuration for API-Watch.
 Uses structlog for JSON-formatted, correlation-ID-aware logging
 in production, and human-readable colored output in development.
 """
+
 import logging
-import os
 import sys
 import uuid
 from contextvars import ContextVar
-from typing import Optional
 
 import structlog
 
 # Context variable for request correlation IDs
-correlation_id: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
+correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
 
 def get_correlation_id() -> str:
@@ -25,9 +24,7 @@ def get_correlation_id() -> str:
     return cid
 
 
-def add_correlation_id(
-    logger: logging.Logger, method_name: str, event_dict: dict
-) -> dict:
+def add_correlation_id(logger: logging.Logger, method_name: str, event_dict: dict) -> dict:
     """Structlog processor: inject correlation ID into every log entry."""
     cid = correlation_id.get()
     if cid:
@@ -35,9 +32,7 @@ def add_correlation_id(
     return event_dict
 
 
-def add_app_context(
-    logger: logging.Logger, method_name: str, event_dict: dict
-) -> dict:
+def add_app_context(logger: logging.Logger, method_name: str, event_dict: dict) -> dict:
     """Structlog processor: add app-level context to log entries."""
     event_dict["service"] = "api-watch"
     return event_dict

@@ -2,9 +2,10 @@
 Mock Server routes — CRUD for mock endpoints + catch-all mock responder.
 Users define mock API endpoints and the server responds with predefined data.
 """
+
 import asyncio
-from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Depends, Request
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select, update
@@ -20,39 +21,40 @@ router = APIRouter(prefix="/mock", tags=["mock"])
 
 # ── Pydantic Schemas ──────────────────────────────────────────────────────────
 
+
 class MockEndpointCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     method: str = "GET"
     path: str
     status_code: int = 200
-    response_body: Optional[str] = None
-    response_headers: Optional[dict] = None
+    response_body: str | None = None
+    response_headers: dict | None = None
     delay_ms: int = 0
     is_active: bool = True
 
 
 class MockEndpointUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    method: Optional[str] = None
-    path: Optional[str] = None
-    status_code: Optional[int] = None
-    response_body: Optional[str] = None
-    response_headers: Optional[dict] = None
-    delay_ms: Optional[int] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    method: str | None = None
+    path: str | None = None
+    status_code: int | None = None
+    response_body: str | None = None
+    response_headers: dict | None = None
+    delay_ms: int | None = None
+    is_active: bool | None = None
 
 
 class MockEndpointResponse(BaseModel):
     id: str
     name: str
-    description: Optional[str]
+    description: str | None
     method: str
     path: str
     status_code: int
-    response_body: Optional[str]
-    response_headers: Optional[dict]
+    response_body: str | None
+    response_headers: dict | None
     delay_ms: int
     is_active: bool
     hit_count: int
@@ -80,10 +82,11 @@ def _to_response(mock: MockEndpoint) -> dict:
 
 # ── CRUD endpoints ────────────────────────────────────────────────────────────
 
-@router.get("/endpoints", response_model=List[MockEndpointResponse])
+
+@router.get("/endpoints", response_model=list[MockEndpointResponse])
 async def list_mock_endpoints(
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List all mock endpoints for the current user/workspace."""
@@ -102,7 +105,7 @@ async def list_mock_endpoints(
 async def create_mock_endpoint(
     data: MockEndpointCreate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new mock endpoint."""
@@ -137,8 +140,7 @@ async def update_mock_endpoint(
 ):
     """Update a mock endpoint."""
     result = await db.execute(
-        select(MockEndpoint)
-        .where(MockEndpoint.id == mock_id, MockEndpoint.owner_id == user.id)
+        select(MockEndpoint).where(MockEndpoint.id == mock_id, MockEndpoint.owner_id == user.id)
     )
     mock = result.scalar_one_or_none()
     if not mock:
@@ -146,7 +148,11 @@ async def update_mock_endpoint(
 
     update_data = data.model_dump(exclude_unset=True)
     if "path" in update_data:
-        update_data["path"] = update_data["path"] if update_data["path"].startswith("/") else f"/{update_data['path']}"
+        update_data["path"] = (
+            update_data["path"]
+            if update_data["path"].startswith("/")
+            else f"/{update_data['path']}"
+        )
     if "method" in update_data:
         update_data["method"] = update_data["method"].upper()
 
@@ -166,8 +172,7 @@ async def delete_mock_endpoint(
 ):
     """Delete a mock endpoint."""
     result = await db.execute(
-        select(MockEndpoint)
-        .where(MockEndpoint.id == mock_id, MockEndpoint.owner_id == user.id)
+        select(MockEndpoint).where(MockEndpoint.id == mock_id, MockEndpoint.owner_id == user.id)
     )
     mock = result.scalar_one_or_none()
     if not mock:
@@ -200,7 +205,7 @@ async def mock_server_catch_all(request: Request, path: str, db: AsyncSession = 
         .where(
             MockEndpoint.method == method,
             MockEndpoint.path == lookup_path,
-            MockEndpoint.is_active == True,
+            MockEndpoint.is_active,
         )
         .limit(1)
     )
@@ -234,8 +239,10 @@ async def mock_server_catch_all(request: Request, path: str, db: AsyncSession = 
     # Try to parse as JSON
     try:
         import json
+
         content = json.loads(body)
         return JSONResponse(status_code=mock.status_code, content=content, headers=headers)
     except (json.JSONDecodeError, TypeError):
         from fastapi.responses import PlainTextResponse
+
         return PlainTextResponse(status_code=mock.status_code, content=body, headers=headers)

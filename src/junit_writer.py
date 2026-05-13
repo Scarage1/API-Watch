@@ -2,9 +2,9 @@
 JUnit XML writer — converts monitor run results into JUnit XML format
 for integration with CI/CD pipelines (GitHub Actions, Azure DevOps, etc.).
 """
-from typing import Optional
-from xml.etree.ElementTree import Element, SubElement, tostring
+
 from xml.dom.minidom import parseString
+from xml.etree.ElementTree import Element, SubElement, tostring
 
 
 def monitor_run_to_junit(monitor_name: str, run) -> str:

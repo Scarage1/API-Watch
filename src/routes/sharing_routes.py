@@ -2,26 +2,31 @@
 Collection sharing & forking routes.
 Share collections with other workspaces and fork/clone them.
 """
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import (
-    User, Collection, SavedRequest, Workspace,
-    CollectionShare, WorkspaceMember, WorkspaceRole,
-    ActivityLog, ActivityAction, _utcnow,
-)
 from ..jwt_auth import get_current_user
+from ..models import (
+    ActivityAction,
+    ActivityLog,
+    Collection,
+    CollectionShare,
+    SavedRequest,
+    User,
+    Workspace,
+)
 from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/collections", tags=["Sharing"])
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class ShareCreate(BaseModel):
     workspace_id: str
@@ -30,6 +35,7 @@ class ShareCreate(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 async def _log_activity(
     db: AsyncSession,
     user_id: str,
@@ -37,8 +43,8 @@ async def _log_activity(
     resource_type: str,
     resource_id: str,
     resource_name: str,
-    workspace_id: Optional[str] = None,
-    details: Optional[dict] = None,
+    workspace_id: str | None = None,
+    details: dict | None = None,
 ):
     log = ActivityLog(
         workspace_id=workspace_id,
@@ -53,7 +59,10 @@ async def _log_activity(
 
 
 async def _verify_collection_owner(
-    collection_id: str, user: User, db: AsyncSession, workspace_id: Optional[str] = None,
+    collection_id: str,
+    user: User,
+    db: AsyncSession,
+    workspace_id: str | None = None,
 ) -> Collection:
     """Verify user owns or has editor access to the collection."""
     query = select(Collection).where(Collection.id == collection_id)
@@ -70,12 +79,13 @@ async def _verify_collection_owner(
 
 # ── Share Collection ──────────────────────────────────────────────────────────
 
+
 @router.post("/{collection_id}/share", status_code=201)
 async def share_collection(
     collection_id: str,
     body: ShareCreate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Share a collection with another workspace."""
@@ -92,7 +102,9 @@ async def share_collection(
 
     # Can't share with the same workspace
     if body.workspace_id == collection.workspace_id:
-        raise HTTPException(status_code=400, detail="Cannot share collection with its own workspace")
+        raise HTTPException(
+            status_code=400, detail="Cannot share collection with its own workspace"
+        )
 
     # Check if already shared
     existing = await db.execute(
@@ -113,8 +125,13 @@ async def share_collection(
     db.add(share)
 
     await _log_activity(
-        db, user.id, ActivityAction.SHARED, "collection", collection_id,
-        collection.name, workspace_id=collection.workspace_id,
+        db,
+        user.id,
+        ActivityAction.SHARED,
+        "collection",
+        collection_id,
+        collection.name,
+        workspace_id=collection.workspace_id,
         details={"target_workspace_id": body.workspace_id, "permission": body.permission},
     )
 
@@ -135,7 +152,7 @@ async def unshare_collection(
     collection_id: str,
     share_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Remove a collection share."""
@@ -155,8 +172,13 @@ async def unshare_collection(
     await db.delete(share)
 
     await _log_activity(
-        db, user.id, ActivityAction.UNSHARED, "collection", collection_id,
-        collection.name, workspace_id=collection.workspace_id,
+        db,
+        user.id,
+        ActivityAction.UNSHARED,
+        "collection",
+        collection_id,
+        collection.name,
+        workspace_id=collection.workspace_id,
         details={"target_workspace_id": target_ws_id},
     )
 
@@ -167,7 +189,7 @@ async def unshare_collection(
 async def list_collection_shares(
     collection_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List all workspaces a collection is shared with."""
@@ -184,23 +206,26 @@ async def list_collection_shares(
     for s in shares:
         ws_result = await db.execute(select(Workspace).where(Workspace.id == s.workspace_id))
         ws = ws_result.scalar_one_or_none()
-        out.append({
-            "id": s.id,
-            "workspace_id": s.workspace_id,
-            "workspace_name": ws.name if ws else "Unknown",
-            "permission": s.permission,
-            "created_at": s.created_at.isoformat(),
-        })
+        out.append(
+            {
+                "id": s.id,
+                "workspace_id": s.workspace_id,
+                "workspace_name": ws.name if ws else "Unknown",
+                "permission": s.permission,
+                "created_at": s.created_at.isoformat(),
+            }
+        )
 
     return out
 
 
 # ── Shared With Me ────────────────────────────────────────────────────────────
 
+
 @router.get("/shared")
 async def list_shared_collections(
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List collections shared with the current workspace."""
@@ -223,26 +248,29 @@ async def list_shared_collections(
         )
         col = col_result.scalar_one_or_none()
         if col:
-            out.append({
-                "id": col.id,
-                "name": col.name,
-                "description": col.description,
-                "request_count": len(col.requests),
-                "permission": s.permission,
-                "share_id": s.id,
-                "created_at": col.created_at.isoformat(),
-            })
+            out.append(
+                {
+                    "id": col.id,
+                    "name": col.name,
+                    "description": col.description,
+                    "request_count": len(col.requests),
+                    "permission": s.permission,
+                    "share_id": s.id,
+                    "created_at": col.created_at.isoformat(),
+                }
+            )
 
     return out
 
 
 # ── Fork / Clone ──────────────────────────────────────────────────────────────
 
+
 @router.post("/{collection_id}/fork", status_code=201)
 async def fork_collection(
     collection_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Fork (clone) a collection into the current workspace.
@@ -308,8 +336,13 @@ async def fork_collection(
         db.add(cloned_req)
 
     await _log_activity(
-        db, user.id, ActivityAction.FORKED, "collection", forked.id,
-        forked.name, workspace_id=workspace_id,
+        db,
+        user.id,
+        ActivityAction.FORKED,
+        "collection",
+        forked.id,
+        forked.name,
+        workspace_id=workspace_id,
         details={"source_collection_id": source.id, "source_name": source.name},
     )
 

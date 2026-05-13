@@ -2,22 +2,20 @@
 OAuth 2.0 proxy routes — frontend calls these to exchange codes/credentials
 for tokens without exposing client secrets to the browser.
 """
-from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
-from ..models import User
 from ..jwt_auth import get_current_user
+from ..models import User
 from ..oauth_handler import (
-    exchange_authorization_code,
+    build_authorization_url,
     client_credentials_grant,
+    exchange_authorization_code,
+    generate_code_challenge,
+    generate_code_verifier,
     password_grant,
     refresh_token_grant,
-    build_authorization_url,
-    generate_code_verifier,
-    generate_code_challenge,
 )
 
 router = APIRouter(prefix="/oauth", tags=["OAuth 2.0"])
@@ -25,20 +23,21 @@ router = APIRouter(prefix="/oauth", tags=["OAuth 2.0"])
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class AuthCodeExchangeRequest(BaseModel):
     token_url: str
     client_id: str
     code: str
     redirect_uri: str
-    client_secret: Optional[str] = None
-    code_verifier: Optional[str] = None
+    client_secret: str | None = None
+    code_verifier: str | None = None
 
 
 class ClientCredentialsRequest(BaseModel):
     token_url: str
     client_id: str
     client_secret: str
-    scope: Optional[str] = None
+    scope: str | None = None
 
 
 class PasswordGrantRequest(BaseModel):
@@ -46,23 +45,23 @@ class PasswordGrantRequest(BaseModel):
     client_id: str
     username: str
     password: str
-    client_secret: Optional[str] = None
-    scope: Optional[str] = None
+    client_secret: str | None = None
+    scope: str | None = None
 
 
 class RefreshTokenRequest(BaseModel):
     token_url: str
     client_id: str
     refresh_token: str
-    client_secret: Optional[str] = None
-    scope: Optional[str] = None
+    client_secret: str | None = None
+    scope: str | None = None
 
 
 class BuildAuthUrlRequest(BaseModel):
     auth_url: str
     client_id: str
     redirect_uri: str
-    scope: Optional[str] = None
+    scope: str | None = None
     use_pkce: bool = True
 
 
@@ -72,6 +71,7 @@ class PKCEResponse(BaseModel):
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/pkce")
 async def create_pkce_pair(
@@ -96,6 +96,7 @@ async def create_authorize_url(
         code_challenge = generate_code_challenge(code_verifier)
 
     import secrets as _secrets
+
     state = _secrets.token_urlsafe(32)
 
     url = build_authorization_url(

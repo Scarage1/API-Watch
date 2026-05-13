@@ -1,26 +1,25 @@
 """
 Tests for utility functions.
 """
+
 import sys
 from pathlib import Path
 
 # Ensure project root is on the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
 from src.utils import (
+    ensure_directory,
     format_bytes,
     format_duration,
-    safe_json_parse,
-    safe_json_dump,
-    truncate_string,
-    sanitize_filename,
-    merge_dicts,
-    get_timestamp,
-    get_iso_timestamp,
-    ensure_directory,
     get_env_var,
-    load_env,
+    get_iso_timestamp,
+    get_timestamp,
+    merge_dicts,
+    safe_json_dump,
+    safe_json_parse,
+    sanitize_filename,
+    truncate_string,
 )
 
 
@@ -80,7 +79,7 @@ class TestSafeJsonParse:
         assert result is None
 
     def test_array_json(self):
-        result = safe_json_parse('[1, 2, 3]')
+        result = safe_json_parse("[1, 2, 3]")
         assert result == [1, 2, 3]
 
 

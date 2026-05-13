@@ -1,16 +1,17 @@
 """
 API key CRUD routes — generate, list, and revoke API keys.
 """
+
 import secrets
-from typing import Optional, List
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import User, ApiKey, ActivityLog, ActivityAction, _utcnow
 from ..jwt_auth import get_current_user, hash_password
+from ..models import ActivityAction, ActivityLog, ApiKey, User, _utcnow
 from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/api-keys", tags=["API Keys"])
@@ -18,24 +19,26 @@ router = APIRouter(prefix="/api-keys", tags=["API Keys"])
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class ApiKeyCreate(BaseModel):
     name: str
-    scopes: List[str] = ["read", "write"]
-    expires_in_days: Optional[int] = None  # None = never expires
+    scopes: list[str] = ["read", "write"]
+    expires_in_days: int | None = None  # None = never expires
 
 
 class ApiKeyResponse(BaseModel):
     id: str
     name: str
     key_prefix: str
-    scopes: List[str]
+    scopes: list[str]
     is_active: bool
-    expires_at: Optional[str] = None
-    last_used_at: Optional[str] = None
+    expires_at: str | None = None
+    last_used_at: str | None = None
     created_at: str
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _key_to_dict(k: ApiKey) -> dict:
     return {
@@ -52,11 +55,12 @@ def _key_to_dict(k: ApiKey) -> dict:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @router.post("", status_code=201)
 async def create_api_key(
     body: ApiKeyCreate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate a new API key. The full key is returned ONLY once."""
@@ -65,6 +69,7 @@ async def create_api_key(
     prefix = raw_key[:8]
 
     from datetime import timedelta
+
     expires_at = None
     if body.expires_in_days:
         expires_at = _utcnow() + timedelta(days=body.expires_in_days)
@@ -73,7 +78,10 @@ async def create_api_key(
     valid_scopes = {"read", "write", "admin", "monitors", "collections"}
     for scope in body.scopes:
         if scope not in valid_scopes:
-            raise HTTPException(status_code=400, detail=f"Invalid scope: {scope}. Valid scopes: {', '.join(sorted(valid_scopes))}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid scope: {scope}. Valid scopes: {', '.join(sorted(valid_scopes))}",
+            )
 
     api_key = ApiKey(
         name=body.name,
@@ -87,9 +95,12 @@ async def create_api_key(
     db.add(api_key)
 
     log = ActivityLog(
-        workspace_id=workspace_id, user_id=user.id,
-        action=ActivityAction.CREATED, resource_type="api_key",
-        resource_id=None, resource_name=body.name,
+        workspace_id=workspace_id,
+        user_id=user.id,
+        action=ActivityAction.CREATED,
+        resource_type="api_key",
+        resource_id=None,
+        resource_name=body.name,
     )
     db.add(log)
 
@@ -106,7 +117,7 @@ async def create_api_key(
 @router.get("")
 async def list_api_keys(
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List all API keys for the current user."""
@@ -123,7 +134,7 @@ async def list_api_keys(
 async def revoke_api_key(
     key_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Revoke (deactivate) an API key."""
@@ -134,9 +145,12 @@ async def revoke_api_key(
         raise HTTPException(status_code=404, detail="API key not found")
 
     log = ActivityLog(
-        workspace_id=workspace_id, user_id=user.id,
-        action=ActivityAction.DELETED, resource_type="api_key",
-        resource_id=api_key.id, resource_name=api_key.name,
+        workspace_id=workspace_id,
+        user_id=user.id,
+        action=ActivityAction.DELETED,
+        resource_type="api_key",
+        resource_id=api_key.id,
+        resource_name=api_key.name,
     )
     db.add(log)
 

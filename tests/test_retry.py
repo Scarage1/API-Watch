@@ -1,12 +1,12 @@
 """
 Tests for retry module.
 """
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
 from src.retry import RetryConfig, RetryHandler, calculate_backoff_delay
 
 

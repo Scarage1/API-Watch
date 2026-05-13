@@ -27,14 +27,14 @@ Protocol:
     { "type": "user_joined", "user": {...} }
     { "type": "user_left", "user_id": "..." }
 """
+
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger("apiwatch.enterprise.collaboration")
 
@@ -43,12 +43,13 @@ logger = logging.getLogger("apiwatch.enterprise.collaboration")
 @dataclass
 class CollaboratorInfo:
     """Information about an active collaborator."""
+
     user_id: str
     username: str
     email: str
-    avatar_color: str = "#6366f1"   # Brand color default
-    cursor_position: Optional[Dict[str, Any]] = None
-    active_resource: Optional[str] = None  # resource_type:resource_id
+    avatar_color: str = "#6366f1"  # Brand color default
+    cursor_position: dict[str, Any] | None = None
+    active_resource: str | None = None  # resource_type:resource_id
     last_heartbeat: float = field(default_factory=time.time)
 
     @property
@@ -56,7 +57,7 @@ class CollaboratorInfo:
         """User is stale if no heartbeat for 60 seconds."""
         return time.time() - self.last_heartbeat > 60
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "user_id": self.user_id,
             "username": self.username,
@@ -71,9 +72,10 @@ class CollaboratorInfo:
 @dataclass
 class CollaborationRoom:
     """A workspace collaboration room."""
+
     workspace_id: str
-    members: Dict[str, CollaboratorInfo] = field(default_factory=dict)
-    connections: Dict[str, Any] = field(default_factory=dict)  # user_id → WebSocket
+    members: dict[str, CollaboratorInfo] = field(default_factory=dict)
+    connections: dict[str, Any] = field(default_factory=dict)  # user_id → WebSocket
     created_at: float = field(default_factory=time.time)
 
     @property
@@ -95,8 +97,8 @@ class CollaborationHub:
     """
 
     def __init__(self):
-        self._rooms: Dict[str, CollaborationRoom] = {}
-        self._user_rooms: Dict[str, str] = {}  # user_id → workspace_id
+        self._rooms: dict[str, CollaborationRoom] = {}
+        self._user_rooms: dict[str, str] = {}  # user_id → workspace_id
 
     # ── Room Management ───────────────────────────────────────
 
@@ -107,7 +109,7 @@ class CollaborationHub:
             logger.info("Collaboration room created: %s", workspace_id)
         return self._rooms[workspace_id]
 
-    def get_room_info(self, workspace_id: str) -> Optional[Dict[str, Any]]:
+    def get_room_info(self, workspace_id: str) -> dict[str, Any] | None:
         """Get room info without creating it."""
         room = self._rooms.get(workspace_id)
         if not room:
@@ -124,7 +126,7 @@ class CollaborationHub:
         self,
         websocket: Any,  # fastapi.WebSocket
         workspace_id: str,
-        user_info: Dict[str, str],
+        user_info: dict[str, str],
     ) -> None:
         """
         Handle a WebSocket connection for real-time collaboration.
@@ -147,16 +149,23 @@ class CollaborationHub:
         logger.info("User %s joined room %s (%d active)", user_id, workspace_id, room.active_count)
 
         # Notify others
-        await self._broadcast(room, {
-            "type": "user_joined",
-            "user": collaborator.to_dict(),
-        }, exclude=user_id)
+        await self._broadcast(
+            room,
+            {
+                "type": "user_joined",
+                "user": collaborator.to_dict(),
+            },
+            exclude=user_id,
+        )
 
         # Send current presence to the new user
-        await self._send(websocket, {
-            "type": "presence",
-            "users": [m.to_dict() for m in room.members.values() if not m.is_stale],
-        })
+        await self._send(
+            websocket,
+            {
+                "type": "presence",
+                "users": [m.to_dict() for m in room.members.values() if not m.is_stale],
+            },
+        )
 
         try:
             # Message loop
@@ -178,7 +187,7 @@ class CollaborationHub:
         self,
         room: CollaborationRoom,
         user_id: str,
-        message: Dict[str, Any],
+        message: dict[str, Any],
     ) -> None:
         """Route incoming WebSocket messages."""
         msg_type = message.get("type", "")
@@ -192,22 +201,30 @@ class CollaborationHub:
         if msg_type == "cursor":
             member.cursor_position = message.get("position")
             member.active_resource = message.get("resource")
-            await self._broadcast(room, {
-                "type": "cursor_update",
-                "user_id": user_id,
-                "position": member.cursor_position,
-                "resource": member.active_resource,
-            }, exclude=user_id)
+            await self._broadcast(
+                room,
+                {
+                    "type": "cursor_update",
+                    "user_id": user_id,
+                    "position": member.cursor_position,
+                    "resource": member.active_resource,
+                },
+                exclude=user_id,
+            )
 
         elif msg_type == "change":
-            await self._broadcast(room, {
-                "type": "change_broadcast",
-                "user_id": user_id,
-                "resource_type": message.get("resource_type"),
-                "resource_id": message.get("resource_id"),
-                "delta": message.get("delta"),
-                "timestamp": time.time(),
-            }, exclude=user_id)
+            await self._broadcast(
+                room,
+                {
+                    "type": "change_broadcast",
+                    "user_id": user_id,
+                    "resource_type": message.get("resource_type"),
+                    "resource_id": message.get("resource_id"),
+                    "delta": message.get("delta"),
+                    "timestamp": time.time(),
+                },
+                exclude=user_id,
+            )
 
         elif msg_type == "heartbeat":
             # Just update the heartbeat timestamp (done above)
@@ -216,10 +233,13 @@ class CollaborationHub:
         elif msg_type == "request_presence":
             ws = room.connections.get(user_id)
             if ws:
-                await self._send(ws, {
-                    "type": "presence",
-                    "users": [m.to_dict() for m in room.members.values() if not m.is_stale],
-                })
+                await self._send(
+                    ws,
+                    {
+                        "type": "presence",
+                        "users": [m.to_dict() for m in room.members.values() if not m.is_stale],
+                    },
+                )
 
     async def _disconnect(self, room: CollaborationRoom, user_id: str) -> None:
         """Handle user disconnection."""
@@ -228,25 +248,30 @@ class CollaborationHub:
         self._user_rooms.pop(user_id, None)
 
         # Notify remaining users
-        await self._broadcast(room, {
-            "type": "user_left",
-            "user_id": user_id,
-        })
+        await self._broadcast(
+            room,
+            {
+                "type": "user_left",
+                "user_id": user_id,
+            },
+        )
 
         # Clean up empty rooms
         if not room.members:
             self._rooms.pop(room.workspace_id, None)
             logger.info("Collaboration room closed: %s (empty)", room.workspace_id)
         else:
-            logger.info("User %s left room %s (%d remaining)", user_id, room.workspace_id, room.active_count)
+            logger.info(
+                "User %s left room %s (%d remaining)", user_id, room.workspace_id, room.active_count
+            )
 
     # ── Broadcasting ──────────────────────────────────────────
 
     async def _broadcast(
         self,
         room: CollaborationRoom,
-        message: Dict[str, Any],
-        exclude: Optional[str] = None,
+        message: dict[str, Any],
+        exclude: str | None = None,
     ) -> None:
         """Broadcast a message to all connections in a room."""
         payload = json.dumps(message)
@@ -265,7 +290,7 @@ class CollaborationHub:
             room.members.pop(uid, None)
             room.connections.pop(uid, None)
 
-    async def _send(self, websocket: Any, message: Dict[str, Any]) -> None:
+    async def _send(self, websocket: Any, message: dict[str, Any]) -> None:
         """Send a message to a single connection."""
         try:
             await websocket.send_text(json.dumps(message))
@@ -278,17 +303,27 @@ class CollaborationHub:
     def _generate_avatar_color(user_id: str) -> str:
         """Generate a consistent color for a user based on their ID."""
         colors = [
-            "#6366f1", "#8b5cf6", "#a855f7", "#d946ef",
-            "#ec4899", "#f43f5e", "#ef4444", "#f97316",
-            "#eab308", "#22c55e", "#14b8a6", "#06b6d4",
-            "#3b82f6", "#6366f1",
+            "#6366f1",
+            "#8b5cf6",
+            "#a855f7",
+            "#d946ef",
+            "#ec4899",
+            "#f43f5e",
+            "#ef4444",
+            "#f97316",
+            "#eab308",
+            "#22c55e",
+            "#14b8a6",
+            "#06b6d4",
+            "#3b82f6",
+            "#6366f1",
         ]
         idx = sum(ord(c) for c in user_id) % len(colors)
         return colors[idx]
 
     # ── Stats ─────────────────────────────────────────────────
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get collaboration statistics."""
         total_users = sum(r.active_count for r in self._rooms.values())
         return {
@@ -327,7 +362,7 @@ class CollaborationHub:
 
 
 # ── Global singleton ──────────────────────────────────────────
-_hub: Optional[CollaborationHub] = None
+_hub: CollaborationHub | None = None
 
 
 def get_collaboration_hub() -> CollaborationHub:

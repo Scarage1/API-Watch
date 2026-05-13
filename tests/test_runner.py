@@ -1,18 +1,20 @@
 """
 Tests for API runner module.
 """
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
-from unittest.mock import patch, MagicMock
-from requests.exceptions import Timeout, ConnectionError as RequestsConnectionError
+from unittest.mock import MagicMock, patch
 
-from src.runner import RequestConfig, RequestResult, APIRunner, create_runner_from_config
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout
+
 from src.auth import AuthHandler
 from src.retry import RetryConfig
+from src.runner import APIRunner, RequestConfig, RequestResult, create_runner_from_config
 
 
 class TestRequestConfig:
@@ -203,7 +205,7 @@ class TestAPIRunner:
         runner.session = mock_session
 
         config = RequestConfig(method="GET", url="https://secure.api.com")
-        result = runner.execute(config)
+        runner.execute(config)
 
         call_kwargs = mock_session.request.call_args
         auth_arg = call_kwargs.kwargs.get("auth") or call_kwargs[1].get("auth")
@@ -222,15 +224,11 @@ class TestCreateRunnerFromConfig:
         assert runner.auth_handler is None
 
     def test_with_auth_config(self):
-        runner = create_runner_from_config(
-            auth_config={"type": "bearer", "token": "tok"}
-        )
+        runner = create_runner_from_config(auth_config={"type": "bearer", "token": "tok"})
         assert runner.auth_handler is not None
         assert runner.auth_handler.get_auth_type() == "bearer"
 
     def test_with_retry_config(self):
-        runner = create_runner_from_config(
-            retry_config={"max_retries": 5, "initial_delay": 0.5}
-        )
+        runner = create_runner_from_config(retry_config={"max_retries": 5, "initial_delay": 0.5})
         assert runner.retry_handler.config.max_retries == 5
         assert runner.retry_handler.config.initial_delay == 0.5

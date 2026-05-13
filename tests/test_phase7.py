@@ -1,9 +1,10 @@
 """
 Tests for Phase 7 — Rate Limiting middleware.
 """
+
 import pytest
-import asyncio
-from src.rate_limit import SlidingWindowCounter, RateLimitConfig
+
+from src.rate_limit import RateLimitConfig, SlidingWindowCounter
 
 
 @pytest.mark.asyncio

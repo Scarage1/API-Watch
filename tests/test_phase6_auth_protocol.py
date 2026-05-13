@@ -12,29 +12,30 @@ Covers:
   - Runner body_type handling (json, form-urlencoded, form-data, raw, xml, graphql, none)
   - Runner cookie integration (inject + capture)
 """
-import pytest
-import re
+
 import base64
 import hashlib
+import re
 import time
-from typing import Optional
+
+import pytest
 from httpx import AsyncClient
 
+from src.cookie_jar import Cookie, get_cookie_store, reset_cookie_store
+
 # ── Import application modules ────────────────────────────────────────────────
-
 from src.oauth_handler import (
-    generate_code_verifier,
-    generate_code_challenge,
-    build_authorization_url,
     OAuthTokenResult,
+    build_authorization_url,
+    generate_code_challenge,
+    generate_code_verifier,
 )
-from src.cookie_jar import Cookie, CookieStore, get_cookie_store, reset_cookie_store
-from src.runner import RequestConfig, APIRunner
-
+from src.runner import APIRunner, RequestConfig
 
 # ══════════════════════════════════════════════════════════════════════════════
 # OAuth 2.0 PKCE helpers
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestOAuthPKCE:
     """Unit tests for PKCE verifier / challenge generation."""
@@ -43,14 +44,14 @@ class TestOAuthPKCE:
         verifier = generate_code_verifier()
         assert isinstance(verifier, str)
         assert len(verifier) >= 43  # Base64url of 64 bytes >= 43 chars
-        assert re.match(r'^[A-Za-z0-9_-]+$', verifier), "Verifier must be base64url"
+        assert re.match(r"^[A-Za-z0-9_-]+$", verifier), "Verifier must be base64url"
 
     def test_generate_code_verifier_custom_length(self):
         v32 = generate_code_verifier(32)
         v128 = generate_code_verifier(128)
         assert len(v32) != len(v128)
-        assert re.match(r'^[A-Za-z0-9_-]+$', v32)
-        assert re.match(r'^[A-Za-z0-9_-]+$', v128)
+        assert re.match(r"^[A-Za-z0-9_-]+$", v32)
+        assert re.match(r"^[A-Za-z0-9_-]+$", v128)
 
     def test_generate_code_verifier_uniqueness(self):
         verifiers = {generate_code_verifier() for _ in range(20)}
@@ -59,8 +60,8 @@ class TestOAuthPKCE:
     def test_generate_code_challenge_s256(self):
         verifier = generate_code_verifier()
         challenge = generate_code_challenge(verifier)
-        digest = hashlib.sha256(verifier.encode('ascii')).digest()
-        expected = base64.urlsafe_b64encode(digest).rstrip(b'=').decode('ascii')
+        digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        expected = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
         assert challenge == expected
 
     def test_generate_code_challenge_deterministic(self):
@@ -71,13 +72,14 @@ class TestOAuthPKCE:
 
     def test_code_challenge_format(self):
         challenge = generate_code_challenge(generate_code_verifier())
-        assert re.match(r'^[A-Za-z0-9_-]+$', challenge), "Challenge must be base64url (no padding)"
-        assert '=' not in challenge, "Challenge must not have padding"
+        assert re.match(r"^[A-Za-z0-9_-]+$", challenge), "Challenge must be base64url (no padding)"
+        assert "=" not in challenge, "Challenge must not have padding"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # OAuth Authorization URL
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestOAuthAuthorizationUrl:
     """Tests for building OAuth authorization URLs."""
@@ -119,6 +121,7 @@ class TestOAuthAuthorizationUrl:
 # ══════════════════════════════════════════════════════════════════════════════
 # OAuth Routes (input validation via FastAPI test client)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestOAuthRoutes:
     """Integration tests for OAuth proxy routes."""
@@ -195,6 +198,7 @@ class TestOAuthRoutes:
 # Cookie Jar — CookieStore
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestCookieStore:
     """Unit tests for CookieStore."""
 
@@ -247,9 +251,7 @@ class TestCookieStore:
     # ── capture_from_headers ─────────────────────────────────────────────
 
     def test_capture_from_set_cookie(self):
-        headers = {
-            "set-cookie": "token=xyz; Path=/; Domain=example.com; Secure; HttpOnly"
-        }
+        headers = {"set-cookie": "token=xyz; Path=/; Domain=example.com; Secure; HttpOnly"}
         count = self.store.capture_from_headers("https://example.com", headers)
         assert count >= 1
         cookies = self.store.get_cookies_for_url("https://example.com/")
@@ -302,6 +304,7 @@ class TestCookieStore:
 # Cookie — dataclass unit tests
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestCookieDataclass:
     """Unit tests for the Cookie dataclass."""
 
@@ -331,6 +334,7 @@ class TestCookieDataclass:
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner — RequestConfig body_type handling (via TestRunner static methods)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestRequestConfigBodyType:
     """Tests for RequestConfig body_type field and _build_body_kwargs."""
@@ -424,8 +428,10 @@ class TestRequestConfigBodyType:
 
     def test_body_none_returns_empty(self):
         cfg = RequestConfig(
-            method="GET", url="https://httpbin.org/get",
-            body=None, body_type="json",
+            method="GET",
+            url="https://httpbin.org/get",
+            body=None,
+            body_type="json",
         )
         kwargs = APIRunner._build_body_kwargs(cfg)
         assert kwargs == {}
@@ -435,21 +441,26 @@ class TestRequestConfigBodyType:
 # Runner — HTTPX body kwargs (async path)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestBuildBodyKwargsHttpx:
     """Tests for _build_body_kwargs_httpx used in async execution."""
 
     def test_json_body(self):
         cfg = RequestConfig(
-            method="POST", url="https://httpbin.org/post",
-            body={"key": "val"}, body_type="json",
+            method="POST",
+            url="https://httpbin.org/post",
+            body={"key": "val"},
+            body_type="json",
         )
         kwargs = APIRunner._build_body_kwargs_httpx(cfg)
         assert "json" in kwargs
 
     def test_raw_body(self):
         cfg = RequestConfig(
-            method="POST", url="https://httpbin.org/post",
-            body="hello", body_type="raw",
+            method="POST",
+            url="https://httpbin.org/post",
+            body="hello",
+            body_type="raw",
         )
         kwargs = APIRunner._build_body_kwargs_httpx(cfg)
         assert "content" in kwargs
@@ -457,15 +468,18 @@ class TestBuildBodyKwargsHttpx:
 
     def test_form_urlencoded_body(self):
         cfg = RequestConfig(
-            method="POST", url="https://httpbin.org/post",
-            body={"a": "1"}, body_type="form-urlencoded",
+            method="POST",
+            url="https://httpbin.org/post",
+            body={"a": "1"},
+            body_type="form-urlencoded",
         )
         kwargs = APIRunner._build_body_kwargs_httpx(cfg)
         assert "data" in kwargs
 
     def test_none_body(self):
         cfg = RequestConfig(
-            method="GET", url="https://httpbin.org/get",
+            method="GET",
+            url="https://httpbin.org/get",
             body_type="none",
         )
         kwargs = APIRunner._build_body_kwargs_httpx(cfg)
@@ -473,24 +487,30 @@ class TestBuildBodyKwargsHttpx:
 
     def test_graphql_body(self):
         cfg = RequestConfig(
-            method="POST", url="https://httpbin.org/post",
-            body={"query": "{ me { name } }"}, body_type="graphql",
+            method="POST",
+            url="https://httpbin.org/post",
+            body={"query": "{ me { name } }"},
+            body_type="graphql",
         )
         kwargs = APIRunner._build_body_kwargs_httpx(cfg)
         assert "content" in kwargs
 
     def test_form_data_body(self):
         cfg = RequestConfig(
-            method="POST", url="https://httpbin.org/post",
-            body={"field": "val"}, body_type="form-data",
+            method="POST",
+            url="https://httpbin.org/post",
+            body={"field": "val"},
+            body_type="form-data",
         )
         kwargs = APIRunner._build_body_kwargs_httpx(cfg)
         assert "files" in kwargs
 
     def test_body_none_returns_empty(self):
         cfg = RequestConfig(
-            method="GET", url="https://httpbin.org/get",
-            body=None, body_type="json",
+            method="GET",
+            url="https://httpbin.org/get",
+            body=None,
+            body_type="json",
         )
         kwargs = APIRunner._build_body_kwargs_httpx(cfg)
         assert kwargs == {}
@@ -499,6 +519,7 @@ class TestBuildBodyKwargsHttpx:
 # ══════════════════════════════════════════════════════════════════════════════
 # OAuth handler — OAuthTokenResult
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestOAuthTokenResult:
     """Tests for the OAuthTokenResult dataclass."""
@@ -538,6 +559,7 @@ class TestOAuthTokenResult:
 # ══════════════════════════════════════════════════════════════════════════════
 # Module singleton
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestCookieStoreSingleton:
     """Tests for cookie_jar module-level singleton."""

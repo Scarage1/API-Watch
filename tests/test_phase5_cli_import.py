@@ -13,17 +13,20 @@ Covers:
   - JUnit XML generation (unit tests)
   - Import/export route error handling
 """
-import pytest
+
 import json
 import xml.etree.ElementTree as ET
-from typing import Optional
 from io import BytesIO
-from httpx import AsyncClient
 
+import pytest
+from httpx import AsyncClient
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def register_user(client: AsyncClient, email: str, username: str, password: str = "TestPass123"):
+
+async def register_user(
+    client: AsyncClient, email: str, username: str, password: str = "TestPass123"
+):
     res = await client.post(
         "/api/v1/auth/register",
         json={"email": email, "username": username, "password": password},
@@ -39,8 +42,10 @@ async def auth_headers(client: AsyncClient, email: str, username: str):
 
 
 async def create_collection(
-    client: AsyncClient, headers: dict, name: str,
-    workspace_id: Optional[str] = None,
+    client: AsyncClient,
+    headers: dict,
+    name: str,
+    workspace_id: str | None = None,
 ) -> dict:
     h = {**headers}
     if workspace_id:
@@ -51,8 +56,12 @@ async def create_collection(
 
 
 async def save_request(
-    client: AsyncClient, headers: dict, collection_id: str, name: str,
-    method: str = "GET", url: str = "https://httpbin.org/get",
+    client: AsyncClient,
+    headers: dict,
+    collection_id: str,
+    name: str,
+    method: str = "GET",
+    url: str = "https://httpbin.org/get",
 ):
     res = await client.post(
         f"/api/v1/collections/{collection_id}/requests",
@@ -71,9 +80,11 @@ async def save_request(
 
 
 async def create_api_key(
-    client: AsyncClient, headers: dict, name: str,
-    scopes: Optional[list] = None,
-    expires_in_days: Optional[int] = None,
+    client: AsyncClient,
+    headers: dict,
+    name: str,
+    scopes: list | None = None,
+    expires_in_days: int | None = None,
 ) -> dict:
     body: dict = {"name": name}
     if scopes is not None:
@@ -86,6 +97,7 @@ async def create_api_key(
 
 
 # ── API Key CRUD ──────────────────────────────────────────────────────────────
+
 
 class TestApiKeyCRUD:
     """Test API key creation, listing, and revocation."""
@@ -183,6 +195,7 @@ class TestApiKeyCRUD:
 
 
 # ── API Key Authentication ────────────────────────────────────────────────────
+
 
 class TestApiKeyAuth:
     """Test authentication via X-API-Key header."""
@@ -312,7 +325,9 @@ class TestPostmanImport:
 
         res = await client.post(
             "/api/v1/import-export/import/postman",
-            files={"file": ("test.postman_collection.json", BytesIO(file_content), "application/json")},
+            files={
+                "file": ("test.postman_collection.json", BytesIO(file_content), "application/json")
+            },
             headers=headers,
         )
         assert res.status_code == 201, f"Import failed: {res.text}"
@@ -358,8 +373,12 @@ class TestPostmanExport:
     async def test_export_postman(self, client: AsyncClient):
         headers, _ = await auth_headers(client, "export@test.dev", "exportuser")
         col = await create_collection(client, headers, "Export Test")
-        await save_request(client, headers, col["id"], "Get Stuff", "GET", "https://api.example.com/stuff")
-        await save_request(client, headers, col["id"], "Post Data", "POST", "https://api.example.com/data")
+        await save_request(
+            client, headers, col["id"], "Get Stuff", "GET", "https://api.example.com/stuff"
+        )
+        await save_request(
+            client, headers, col["id"], "Post Data", "POST", "https://api.example.com/data"
+        )
 
         res = await client.get(f"/api/v1/import-export/export/postman/{col['id']}", headers=headers)
         assert res.status_code == 200
@@ -375,7 +394,9 @@ class TestPostmanExport:
     @pytest.mark.asyncio
     async def test_export_postman_nonexistent_collection(self, client: AsyncClient):
         headers, _ = await auth_headers(client, "exportnone@test.dev", "exportnone")
-        res = await client.get("/api/v1/import-export/export/postman/nonexistent-id", headers=headers)
+        res = await client.get(
+            "/api/v1/import-export/export/postman/nonexistent-id", headers=headers
+        )
         assert res.status_code == 404
 
     @pytest.mark.asyncio
@@ -391,6 +412,7 @@ class TestPostmanExport:
 
 # ── OpenAPI Export ────────────────────────────────────────────────────────────
 
+
 class TestOpenApiExport:
     """Test exporting collections as OpenAPI 3.0 spec."""
 
@@ -398,8 +420,12 @@ class TestOpenApiExport:
     async def test_export_openapi(self, client: AsyncClient):
         headers, _ = await auth_headers(client, "oapiex@test.dev", "oapiex")
         col = await create_collection(client, headers, "OpenAPI Export Test")
-        await save_request(client, headers, col["id"], "List Users", "GET", "https://api.example.com/users")
-        await save_request(client, headers, col["id"], "Create User", "POST", "https://api.example.com/users")
+        await save_request(
+            client, headers, col["id"], "List Users", "GET", "https://api.example.com/users"
+        )
+        await save_request(
+            client, headers, col["id"], "Create User", "POST", "https://api.example.com/users"
+        )
 
         res = await client.get(f"/api/v1/import-export/export/openapi/{col['id']}", headers=headers)
         assert res.status_code == 200
@@ -417,7 +443,9 @@ class TestOpenApiExport:
         headers, _ = await auth_headers(client, "oapigroup@test.dev", "oapigroup")
         col = await create_collection(client, headers, "Grouped")
         await save_request(client, headers, col["id"], "R1", "GET", "https://api.example.com/items")
-        await save_request(client, headers, col["id"], "R2", "POST", "https://api.example.com/items")
+        await save_request(
+            client, headers, col["id"], "R2", "POST", "https://api.example.com/items"
+        )
         await save_request(client, headers, col["id"], "R3", "GET", "https://api.example.com/other")
 
         res = await client.get(f"/api/v1/import-export/export/openapi/{col['id']}", headers=headers)
@@ -432,11 +460,14 @@ class TestOpenApiExport:
     @pytest.mark.asyncio
     async def test_export_openapi_nonexistent(self, client: AsyncClient):
         headers, _ = await auth_headers(client, "oapinone@test.dev", "oapinone")
-        res = await client.get("/api/v1/import-export/export/openapi/nonexistent-id", headers=headers)
+        res = await client.get(
+            "/api/v1/import-export/export/openapi/nonexistent-id", headers=headers
+        )
         assert res.status_code == 404
 
 
 # ── JUnit XML (unit tests) ───────────────────────────────────────────────────
+
 
 class TestJunitWriter:
     """Test JUnit XML output from results_to_junit."""
@@ -445,8 +476,18 @@ class TestJunitWriter:
         from src.junit_writer import results_to_junit
 
         results = [
-            {"request_name": "GET /health", "status_code": 200, "response_time": 0.042, "success": True},
-            {"request_name": "GET /users", "status_code": 200, "response_time": 0.105, "success": True},
+            {
+                "request_name": "GET /health",
+                "status_code": 200,
+                "response_time": 0.042,
+                "success": True,
+            },
+            {
+                "request_name": "GET /users",
+                "status_code": 200,
+                "response_time": 0.105,
+                "success": True,
+            },
         ]
         xml_str = results_to_junit("Health Suite", results)
 
@@ -463,8 +504,19 @@ class TestJunitWriter:
         from src.junit_writer import results_to_junit
 
         results = [
-            {"request_name": "GET /health", "status_code": 200, "response_time": 0.042, "success": True},
-            {"request_name": "POST /users", "status_code": 500, "response_time": 0.200, "success": False, "error": "Server Error"},
+            {
+                "request_name": "GET /health",
+                "status_code": 200,
+                "response_time": 0.042,
+                "success": True,
+            },
+            {
+                "request_name": "POST /users",
+                "status_code": 500,
+                "response_time": 0.200,
+                "success": False,
+                "error": "Server Error",
+            },
         ]
         xml_str = results_to_junit("Mixed Suite", results)
 
@@ -480,7 +532,13 @@ class TestJunitWriter:
         from src.junit_writer import results_to_junit
 
         results = [
-            {"request_name": "GET /unreachable", "status_code": 0, "response_time": 0, "success": False, "error": "Connection timeout"},
+            {
+                "request_name": "GET /unreachable",
+                "status_code": 0,
+                "response_time": 0,
+                "success": False,
+                "error": "Connection timeout",
+            },
         ]
         xml_str = results_to_junit("Error Suite", results)
 
@@ -511,6 +569,7 @@ class TestJunitWriter:
 
 # ── Postman Converter (unit tests) ───────────────────────────────────────────
 
+
 class TestPostmanConverter:
     """Unit tests for postman_v2 import/export functions."""
 
@@ -538,8 +597,20 @@ class TestPostmanConverter:
         from src.importers.postman_v2 import export_postman_v2
 
         requests = [
-            {"name": "R1", "method": "GET", "url": "https://example.com/api", "headers": {}, "body": None},
-            {"name": "R2", "method": "POST", "url": "https://example.com/api", "headers": {"Content-Type": "application/json"}, "body": '{"a": 1}'},
+            {
+                "name": "R1",
+                "method": "GET",
+                "url": "https://example.com/api",
+                "headers": {},
+                "body": None,
+            },
+            {
+                "name": "R2",
+                "method": "POST",
+                "url": "https://example.com/api",
+                "headers": {"Content-Type": "application/json"},
+                "body": '{"a": 1}',
+            },
         ]
         result = export_postman_v2("Test", "Desc", requests)
         assert result["info"]["name"] == "Test"
@@ -547,7 +618,7 @@ class TestPostmanConverter:
         assert "schema" in result["info"]
 
     def test_roundtrip_fidelity(self):
-        from src.importers.postman_v2 import import_postman_v2, export_postman_v2
+        from src.importers.postman_v2 import export_postman_v2, import_postman_v2
 
         imported = import_postman_v2(SAMPLE_POSTMAN_COLLECTION)
         exported = export_postman_v2(
@@ -561,6 +632,7 @@ class TestPostmanConverter:
 
 # ── OpenAPI Exporter (unit tests) ─────────────────────────────────────────────
 
+
 class TestOpenApiExporter:
     """Unit tests for the OpenAPI export function."""
 
@@ -568,8 +640,20 @@ class TestOpenApiExporter:
         from src.importers.openapi_export import export_openapi
 
         requests = [
-            {"name": "List", "method": "GET", "url": "https://api.example.com/items", "headers": {}, "body": None},
-            {"name": "Create", "method": "POST", "url": "https://api.example.com/items", "headers": {"Content-Type": "application/json"}, "body": '{"name": "test"}'},
+            {
+                "name": "List",
+                "method": "GET",
+                "url": "https://api.example.com/items",
+                "headers": {},
+                "body": None,
+            },
+            {
+                "name": "Create",
+                "method": "POST",
+                "url": "https://api.example.com/items",
+                "headers": {"Content-Type": "application/json"},
+                "body": '{"name": "test"}',
+            },
         ]
         spec = export_openapi("My API", "Test API", requests)
 
@@ -583,7 +667,13 @@ class TestOpenApiExporter:
         from src.importers.openapi_export import export_openapi
 
         requests = [
-            {"name": "R1", "method": "GET", "url": "https://api.example.com/v2/things", "headers": {}, "body": None},
+            {
+                "name": "R1",
+                "method": "GET",
+                "url": "https://api.example.com/v2/things",
+                "headers": {},
+                "body": None,
+            },
         ]
         spec = export_openapi("Servers", "", requests)
 
@@ -600,11 +690,13 @@ class TestOpenApiExporter:
 
 # ── CI Template Validation ────────────────────────────────────────────────────
 
+
 class TestCITemplates:
     """Validate CI template files exist and have expected content."""
 
     def test_github_actions_template_exists(self):
         import os
+
         path = os.path.join(os.path.dirname(__file__), "..", "ci-templates", "github-actions.yml")
         assert os.path.isfile(path), "GitHub Actions template should exist"
         with open(path) as f:
@@ -613,6 +705,7 @@ class TestCITemplates:
 
     def test_azure_devops_template_exists(self):
         import os
+
         path = os.path.join(os.path.dirname(__file__), "..", "ci-templates", "azure-devops.yml")
         assert os.path.isfile(path), "Azure DevOps template should exist"
         with open(path) as f:
@@ -621,6 +714,7 @@ class TestCITemplates:
 
 
 # ── Edge Cases ────────────────────────────────────────────────────────────────
+
 
 class TestEdgeCases:
     """Edge cases and error handling."""

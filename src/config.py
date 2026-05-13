@@ -8,6 +8,7 @@ Pydantic BaseSettings gives us:
   - .env file support
   - A single source of truth for every tunable knob
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,7 +16,6 @@ import os
 import secrets
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
@@ -127,7 +127,7 @@ class Settings(BaseSettings):
     # ── Computed helpers ─────────────────────────────────────────────
 
     @property
-    def cors_origins_list(self) -> List[str]:
+    def cors_origins_list(self) -> list[str]:
         """Return CORS origins as a list."""
         return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
 
@@ -147,7 +147,7 @@ class Settings(BaseSettings):
     }
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Return cached application settings (singleton)."""
     return Settings()

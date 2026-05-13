@@ -4,40 +4,41 @@ FastAPI server providing REST endpoints for the React frontend.
 Includes: v1 API (auth, collections, environments, history),
 legacy endpoints, webhook receiver, and SPA static file serving.
 """
-import os
-import json
+
 import ipaddress
-from pathlib import Path
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+import json
+import os
+import re
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-import logging
 
+from src.auth import create_auth_from_config
+from src.cache import close_cache, get_cache
 from src.config import get_settings
-from src.auth import AuthHandler, create_auth_from_config
-from src.retry import RetryConfig
-from src.runner import APIRunner, RequestConfig, RequestResult
+from src.database import check_db_health, close_db, get_db, init_db
 from src.diagnose import DiagnosisEngine
-from src.database import init_db, close_db, get_db, check_db_health
-from src.models import RequestHistory
 from src.jwt_auth import get_current_user
-from src.routes import api_v1_router, mock_catch_router
-from src.rate_limit import RateLimitMiddleware, RateLimitConfig
-from src.cache import get_cache, close_cache
-from src.storage import get_storage, close_storage
-from src.scheduler import start_scheduler, stop_scheduler
-from src.telemetry import telemetry_middleware, reset_telemetry
 
 # Setup structured logging
 from src.logging_config import configure_logging, get_logger
+from src.models import RequestHistory
+from src.rate_limit import RateLimitConfig, RateLimitMiddleware
+from src.retry import RetryConfig
+from src.routes import api_v1_router, mock_catch_router
+from src.runner import APIRunner, RequestConfig, RequestResult
+from src.scheduler import start_scheduler, stop_scheduler
+from src.storage import close_storage, get_storage
+from src.telemetry import telemetry_middleware
 
 _env = os.getenv("ENVIRONMENT", "production")
 configure_logging(environment=_env, log_level=os.getenv("LOG_LEVEL", "INFO"))
@@ -46,6 +47,7 @@ logger = get_logger(__name__)
 
 # Global API runner singleton (initialized in lifespan)
 _global_runner: "APIRunner | None" = None
+
 
 # --- Lifespan ---
 @asynccontextmanager
@@ -60,8 +62,8 @@ async def lifespan(app: FastAPI):
     logger.info("Database ready.")
 
     # Warm up cache & storage (lazy singletons)
-    cache = get_cache()
-    storage = get_storage()
+    get_cache()
+    get_storage()
     logger.info("Cache & storage initialized.")
 
     # Create global API runner with shared connection pool
@@ -75,6 +77,7 @@ async def lifespan(app: FastAPI):
 
     # Start the background monitor scheduler
     import asyncio
+
     scheduler_task = asyncio.create_task(start_scheduler())
     logger.info("Monitor scheduler started.")
 
@@ -128,31 +131,40 @@ app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
 app.middleware("http")(telemetry_middleware)
 
 # --- Prometheus metrics ---
-from src.metrics import MetricsMiddleware, router as metrics_router
+from src.metrics import MetricsMiddleware
+from src.metrics import router as metrics_router
+
 app.add_middleware(MetricsMiddleware)
 app.include_router(metrics_router)
 
 # --- AI Engine ---
 from src.ai.routes import router as ai_router
+
 app.include_router(ai_router)
 
 # --- Enterprise (SSO, Audit, Compliance, Collaboration) ---
 from src.enterprise.routes import router as enterprise_router
+
 app.include_router(enterprise_router)
+
 
 # --- Global exception handler ---
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception):
     import traceback
+
     tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
     error_detail = "".join(tb)
-    logger.error("Unhandled exception on %s %s:\n%s", request.method, request.url.path, error_detail)
+    logger.error(
+        "Unhandled exception on %s %s:\n%s", request.method, request.url.path, error_detail
+    )
     # Only expose details in debug mode — never in production
     if os.getenv("DEBUG", "").lower() in ("true", "1"):
         content = {"detail": str(exc), "traceback": error_detail}
     else:
         content = {"detail": "Internal server error"}
     return JSONResponse(status_code=500, content=content)
+
 
 # --- Request body size limit ---
 MAX_BODY_SIZE = _settings.max_request_body_size
@@ -165,35 +177,41 @@ async def limit_request_body_size(request: Request, call_next):
     if content_length and int(content_length) > MAX_BODY_SIZE:
         return JSONResponse(
             status_code=413,
-            content={"detail": f"Request body too large. Maximum size is {MAX_BODY_SIZE // (1024*1024)} MB."},
+            content={
+                "detail": f"Request body too large. Maximum size is {MAX_BODY_SIZE // (1024 * 1024)} MB."
+            },
         )
     return await call_next(request)
 
 
 # --- SSRF Protection ---
 _PRIVATE_NETWORKS = [
-    ipaddress.ip_network('127.0.0.0/8'),
-    ipaddress.ip_network('10.0.0.0/8'),
-    ipaddress.ip_network('172.16.0.0/12'),
-    ipaddress.ip_network('192.168.0.0/16'),
-    ipaddress.ip_network('169.254.0.0/16'),  # link-local
-    ipaddress.ip_network('::1/128'),          # IPv6 loopback
-    ipaddress.ip_network('fc00::/7'),         # IPv6 private
-    ipaddress.ip_network('fe80::/10'),        # IPv6 link-local
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local
+    ipaddress.ip_network("::1/128"),  # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),  # IPv6 private
+    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
 ]
 
 
 def _validate_url(url: str) -> None:
     """Validate URL: must be http/https, must not target private/internal IPs."""
     parsed = urlparse(url)
-    if parsed.scheme not in ('http', 'https'):
-        raise HTTPException(status_code=400, detail=f"Only http and https URLs are allowed (got '{parsed.scheme}')")
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=400, detail=f"Only http and https URLs are allowed (got '{parsed.scheme}')"
+        )
     if not parsed.hostname:
         raise HTTPException(status_code=400, detail="URL must have a valid hostname")
     # Block obvious private hostnames
     hostname = parsed.hostname.lower()
-    if hostname in ('localhost', '0.0.0.0', '[::]'):
-        raise HTTPException(status_code=400, detail="Requests to localhost/loopback addresses are not allowed")
+    if hostname in ("localhost", "0.0.0.0", "[::]"):
+        raise HTTPException(
+            status_code=400, detail="Requests to localhost/loopback addresses are not allowed"
+        )
     # Try to parse as IP and check against private ranges
     try:
         ip = ipaddress.ip_address(hostname)
@@ -206,6 +224,7 @@ def _validate_url(url: str) -> None:
     except ValueError:
         pass  # Not an IP literal — that's fine (it's a hostname)
 
+
 # Include v1 API routes
 app.include_router(api_v1_router)
 
@@ -215,41 +234,42 @@ app.include_router(mock_catch_router)
 
 # --- Request Models (legacy endpoints) ---
 
+
 class RequestConfigInput(BaseModel):
     method: str
     url: str
-    headers: Optional[Dict[str, str]] = {}
-    params: Optional[Dict[str, str]] = {}
-    body: Optional[Any] = None
+    headers: dict[str, str] | None = {}
+    params: dict[str, str] | None = {}
+    body: Any | None = None
     timeout: int = 10
-    env_variables: Optional[Dict[str, str]] = None  # environment variables for {{VAR}} interpolation
+    env_variables: dict[str, str] | None = None  # environment variables for {{VAR}} interpolation
 
 
 class TestCaseInput(BaseModel):
     id: str
     method: str
     path: str
-    description: Optional[str] = None
-    headers: Optional[Dict[str, str]] = {}
-    params: Optional[Dict[str, str]] = {}
-    body: Optional[Any] = None
+    description: str | None = None
+    headers: dict[str, str] | None = {}
+    params: dict[str, str] | None = {}
+    body: Any | None = None
     timeout_seconds: int = 10
 
 
 class TestSuiteInput(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     base_url: str
-    defaults: Optional[Dict[str, Any]] = {}
-    auth: Optional[Dict[str, Any]] = {}
-    tests: List[TestCaseInput]
+    defaults: dict[str, Any] | None = {}
+    auth: dict[str, Any] | None = {}
+    tests: list[TestCaseInput]
 
 
 # --- Variable interpolation (extracted to src/interpolation.py) ---
-from src.interpolation import interpolate_string, interpolate_dict, interpolate_body
-
+from src.interpolation import interpolate_body, interpolate_dict, interpolate_string
 
 # --- Core endpoints ---
+
 
 @app.get("/health")
 async def health_check():
@@ -276,11 +296,13 @@ async def health_check():
 async def execute_single_request(
     request_input: RequestConfigInput,
     db: AsyncSession = Depends(get_db),
-    user = Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     """Execute a single API request (async via httpx)."""
     import time as _time
+
     from src.metrics import metrics as _metrics
+
     _exec_start = _time.perf_counter()
     try:
         # Apply environment variable interpolation if provided
@@ -353,8 +375,8 @@ async def execute_single_request(
 async def execute_test_suite(
     suite_input: TestSuiteInput,
     db: AsyncSession = Depends(get_db),
-    user = Depends(get_current_user),
-) -> List[RequestResult]:
+    user=Depends(get_current_user),
+) -> list[RequestResult]:
     """Execute a test suite (async via httpx)."""
     try:
         # SSRF protection: validate base URL
@@ -362,7 +384,7 @@ async def execute_test_suite(
 
         auth_handler = create_auth_from_config(suite_input.auth or {})
         retry_config = RetryConfig(
-            max_retries=suite_input.defaults.get('retries', 3) if suite_input.defaults else 3,
+            max_retries=suite_input.defaults.get("retries", 3) if suite_input.defaults else 3,
             initial_delay=1.0,
         )
         runner = APIRunner(auth_handler, retry_config, logger)
@@ -370,7 +392,9 @@ async def execute_test_suite(
         results = []
         for test in suite_input.tests:
             url = suite_input.base_url + test.path
-            headers = (suite_input.defaults.get('headers', {}) if suite_input.defaults else {}).copy()
+            headers = (
+                suite_input.defaults.get("headers", {}) if suite_input.defaults else {}
+            ).copy()
             headers.update(test.headers or {})
 
             config = RequestConfig(
@@ -433,7 +457,7 @@ async def diagnose_result(result: RequestResult):
 
 
 @app.post("/api/stats")
-async def get_stats(results: List[RequestResult]):
+async def get_stats(results: list[RequestResult]):
     """Calculate statistics from results."""
     try:
         summary = DiagnosisEngine.get_summary(results)
@@ -458,6 +482,7 @@ async def get_stats(results: List[RequestResult]):
 # NOTE: Webhook routes MUST be registered before the SPA catch-all
 # so that GET /webhook/... isn't swallowed by /{full_path:path}.
 
+
 @app.api_route("/webhook/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 @app.api_route("/webhook", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def webhook_catch_all(request: Request):
@@ -475,12 +500,12 @@ async def webhook_catch_all(request: Request):
             body = None
 
     # Sanitize timestamp for safe filename
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    safe_timestamp = re.sub(r'[^a-zA-Z0-9_]', '', timestamp)
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    safe_timestamp = re.sub(r"[^a-zA-Z0-9_]", "", timestamp)
     log_path = f"webhooks/webhook_{safe_timestamp}.json"
 
     log_data = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "endpoint": str(request.url.path),
         "method": method,
         "headers": headers,
@@ -498,7 +523,7 @@ async def webhook_catch_all(request: Request):
             "status": "received",
             "message": "Webhook received and logged successfully",
             "log_path": log_path,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         },
     )
 
@@ -523,7 +548,11 @@ if frontend_dist:
         """Return index.html with no-cache so the browser always fetches the latest bundle references."""
         return FileResponse(
             frontend_dist / "index.html",
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"},
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
         )
 
     @app.get("/{full_path:path}")
@@ -542,6 +571,7 @@ if frontend_dist:
 
         return _spa_html_response()
 else:
+
     @app.get("/")
     async def root():
         """Root endpoint with service info."""
@@ -550,8 +580,18 @@ else:
             "status": "running",
             "version": "2.0.0",
             "endpoints": {
-                "legacy": ["/api/execute-request", "/api/execute-suite", "/api/diagnose", "/api/stats"],
-                "v1": ["/api/v1/auth/*", "/api/v1/collections/*", "/api/v1/environments/*", "/api/v1/history/*"],
+                "legacy": [
+                    "/api/execute-request",
+                    "/api/execute-suite",
+                    "/api/diagnose",
+                    "/api/stats",
+                ],
+                "v1": [
+                    "/api/v1/auth/*",
+                    "/api/v1/collections/*",
+                    "/api/v1/environments/*",
+                    "/api/v1/history/*",
+                ],
             },
         }
 

@@ -3,18 +3,21 @@ Environments CRUD routes.
 Workspace-aware: when X-Workspace-Id header is sent, scopes to that workspace.
 Supports scope (personal/workspace) and secret variable masking.
 """
-from typing import Optional, List
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import (
-    User, Environment, EnvironmentScope,
-    ActivityLog, ActivityAction,
-)
 from ..jwt_auth import get_current_user
+from ..models import (
+    ActivityAction,
+    ActivityLog,
+    Environment,
+    EnvironmentScope,
+    User,
+)
 from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/environments", tags=["Environments"])
@@ -26,36 +29,35 @@ def _mask_secrets(variables: dict, secret_keys: list) -> dict:
     """Return a copy of variables with secret values masked."""
     if not secret_keys:
         return variables
-    return {
-        k: (_SECRET_MASK if k in secret_keys else v)
-        for k, v in variables.items()
-    }
+    return {k: (_SECRET_MASK if k in secret_keys else v) for k, v in variables.items()}
 
 
 # --- Schemas ---
+
 
 class EnvironmentCreate(BaseModel):
     name: str
     variables: dict = {}
     is_active: bool = False
     scope: str = "personal"  # "personal" or "workspace"
-    secret_keys: List[str] = []
+    secret_keys: list[str] = []
 
 
 class EnvironmentUpdate(BaseModel):
-    name: Optional[str] = None
-    variables: Optional[dict] = None
-    is_active: Optional[bool] = None
-    scope: Optional[str] = None
-    secret_keys: Optional[List[str]] = None
+    name: str | None = None
+    variables: dict | None = None
+    is_active: bool | None = None
+    scope: str | None = None
+    secret_keys: list[str] | None = None
 
 
 # --- CRUD ---
 
+
 @router.get("")
 async def list_environments(
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List all environments for the current user/workspace."""
@@ -85,11 +87,13 @@ async def list_environments(
 async def create_environment(
     body: EnvironmentCreate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new environment."""
-    scope_enum = EnvironmentScope.WORKSPACE if body.scope == "workspace" else EnvironmentScope.PERSONAL
+    scope_enum = (
+        EnvironmentScope.WORKSPACE if body.scope == "workspace" else EnvironmentScope.PERSONAL
+    )
     env = Environment(
         name=body.name,
         variables=body.variables,
@@ -142,11 +146,11 @@ async def create_environment(
 @router.get("/active")
 async def get_active_environment(
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get the currently active environment."""
-    query = select(Environment).where(Environment.is_active == True)
+    query = select(Environment).where(Environment.is_active)
     if workspace_id:
         query = query.where(Environment.workspace_id == workspace_id)
     else:
@@ -168,7 +172,7 @@ async def update_environment(
     env_id: str,
     body: EnvironmentUpdate,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Update an environment."""
@@ -195,7 +199,9 @@ async def update_environment(
     # Handle scope enum conversion
     if "scope" in update_data:
         scope_val = update_data.pop("scope")
-        env.scope = EnvironmentScope.WORKSPACE if scope_val == "workspace" else EnvironmentScope.PERSONAL
+        env.scope = (
+            EnvironmentScope.WORKSPACE if scope_val == "workspace" else EnvironmentScope.PERSONAL
+        )
     for key, value in update_data.items():
         setattr(env, key, value)
 
@@ -226,7 +232,7 @@ async def update_environment(
 async def delete_environment(
     env_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete an environment."""

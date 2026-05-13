@@ -2,19 +2,23 @@
 Collection versioning (snapshot) routes.
 Auto-snapshot on changes, list versions, restore a version.
 """
-from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import (
-    User, Collection, SavedRequest, CollectionSnapshot,
-    ActivityLog, ActivityAction,
-)
 from ..jwt_auth import get_current_user
+from ..models import (
+    ActivityAction,
+    ActivityLog,
+    Collection,
+    CollectionSnapshot,
+    SavedRequest,
+    User,
+)
 from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/collections", tags=["Versioning"])
@@ -22,11 +26,13 @@ router = APIRouter(prefix="/collections", tags=["Versioning"])
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class SnapshotCreate(BaseModel):
-    label: Optional[str] = None
+    label: str | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _serialize_collection(collection: Collection) -> dict:
     """Serialize a collection + requests into a JSON-safe snapshot dict."""
@@ -55,14 +61,18 @@ def _serialize_collection(collection: Collection) -> dict:
 async def _get_next_version(db: AsyncSession, collection_id: str) -> int:
     """Get the next version number for a collection snapshot."""
     result = await db.execute(
-        select(func.coalesce(func.max(CollectionSnapshot.version), 0))
-        .where(CollectionSnapshot.collection_id == collection_id)
+        select(func.coalesce(func.max(CollectionSnapshot.version), 0)).where(
+            CollectionSnapshot.collection_id == collection_id
+        )
     )
     return result.scalar() + 1
 
 
 async def _verify_collection(
-    collection_id: str, user: User, db: AsyncSession, workspace_id: Optional[str] = None,
+    collection_id: str,
+    user: User,
+    db: AsyncSession,
+    workspace_id: str | None = None,
 ) -> Collection:
     """Load collection with requests, verifying access."""
     query = (
@@ -83,12 +93,13 @@ async def _verify_collection(
 
 # ── Create Snapshot ───────────────────────────────────────────────────────────
 
+
 @router.post("/{collection_id}/snapshots", status_code=201)
 async def create_snapshot(
     collection_id: str,
     body: SnapshotCreate = SnapshotCreate(),
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a snapshot of the current collection state."""
@@ -133,11 +144,12 @@ async def create_snapshot(
 
 # ── List Snapshots ────────────────────────────────────────────────────────────
 
+
 @router.get("/{collection_id}/snapshots")
 async def list_snapshots(
     collection_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List all snapshots for a collection, newest first."""
@@ -165,12 +177,13 @@ async def list_snapshots(
 
 # ── Get Snapshot Detail ───────────────────────────────────────────────────────
 
+
 @router.get("/{collection_id}/snapshots/{snapshot_id}")
 async def get_snapshot(
     collection_id: str,
     snapshot_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Get full snapshot data including all requests."""
@@ -199,12 +212,13 @@ async def get_snapshot(
 
 # ── Restore Snapshot ──────────────────────────────────────────────────────────
 
+
 @router.post("/{collection_id}/snapshots/{snapshot_id}/restore")
 async def restore_snapshot(
     collection_id: str,
     snapshot_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Restore a collection from a snapshot. Creates a new snapshot of the

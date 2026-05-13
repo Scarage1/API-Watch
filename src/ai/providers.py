@@ -12,14 +12,14 @@ Design principles:
   3. Streaming-native: All completions support SSE streaming.
   4. Graceful degradation: AI features are optional — app works without any AI.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from enum import StrEnum
 
 import httpx
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── Data Models ───────────────────────────────────────────────
-class AIProvider(str, Enum):
+class AIProvider(StrEnum):
     OLLAMA = "ollama"
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
@@ -42,6 +42,7 @@ class ChatMessage:
 @dataclass
 class AIConfig:
     """Configuration for AI provider connection."""
+
     provider: AIProvider = AIProvider.OLLAMA
     model: str = "llama3.2"
     base_url: str = "http://localhost:11434"
@@ -54,6 +55,7 @@ class AIConfig:
 @dataclass
 class AIResponse:
     """Unified response from any AI provider."""
+
     content: str
     model: str
     provider: str
@@ -70,12 +72,12 @@ class BaseAIProvider(ABC):
         self.config = config
 
     @abstractmethod
-    async def complete(self, messages: List[ChatMessage]) -> AIResponse:
+    async def complete(self, messages: list[ChatMessage]) -> AIResponse:
         """Send a chat completion request and return the full response."""
         ...
 
     @abstractmethod
-    async def stream(self, messages: List[ChatMessage]) -> AsyncIterator[str]:
+    async def stream(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         """Stream a chat completion response token by token."""
         ...
 
@@ -92,8 +94,9 @@ class OllamaProvider(BaseAIProvider):
     Privacy-first: all data stays on the user's machine.
     """
 
-    async def complete(self, messages: List[ChatMessage]) -> AIResponse:
+    async def complete(self, messages: list[ChatMessage]) -> AIResponse:
         import time
+
         start = time.perf_counter()
 
         payload = {
@@ -126,7 +129,7 @@ class OllamaProvider(BaseAIProvider):
             duration_ms=(time.perf_counter() - start) * 1000,
         )
 
-    async def stream(self, messages: List[ChatMessage]) -> AsyncIterator[str]:
+    async def stream(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         payload = {
             "model": self.config.model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
@@ -149,6 +152,7 @@ class OllamaProvider(BaseAIProvider):
                         continue
                     try:
                         import json
+
                         chunk = json.loads(line)
                         token = chunk.get("message", {}).get("content", "")
                         if token:
@@ -166,7 +170,7 @@ class OllamaProvider(BaseAIProvider):
         except Exception:
             return False
 
-    async def list_models(self) -> List[str]:
+    async def list_models(self) -> list[str]:
         """List available Ollama models."""
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
@@ -185,8 +189,9 @@ class OpenAIProvider(BaseAIProvider):
     Compatible with any OpenAI-API-compatible endpoint (Azure, local proxies).
     """
 
-    async def complete(self, messages: List[ChatMessage]) -> AIResponse:
+    async def complete(self, messages: list[ChatMessage]) -> AIResponse:
         import time
+
         start = time.perf_counter()
 
         headers = {
@@ -224,7 +229,7 @@ class OpenAIProvider(BaseAIProvider):
             duration_ms=(time.perf_counter() - start) * 1000,
         )
 
-    async def stream(self, messages: List[ChatMessage]) -> AsyncIterator[str]:
+    async def stream(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
             "Content-Type": "application/json",
@@ -255,6 +260,7 @@ class OpenAIProvider(BaseAIProvider):
                         break
                     try:
                         import json
+
                         chunk = json.loads(data_str)
                         delta = chunk["choices"][0].get("delta", {})
                         token = delta.get("content", "")
@@ -282,8 +288,9 @@ class AnthropicProvider(BaseAIProvider):
     Anthropic Claude API — cloud LLM. Opt-in only.
     """
 
-    async def complete(self, messages: List[ChatMessage]) -> AIResponse:
+    async def complete(self, messages: list[ChatMessage]) -> AIResponse:
         import time
+
         start = time.perf_counter()
 
         # Separate system message
@@ -333,7 +340,7 @@ class AnthropicProvider(BaseAIProvider):
             duration_ms=(time.perf_counter() - start) * 1000,
         )
 
-    async def stream(self, messages: List[ChatMessage]) -> AsyncIterator[str]:
+    async def stream(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         system_msg = ""
         chat_messages = []
         for m in messages:
@@ -372,6 +379,7 @@ class AnthropicProvider(BaseAIProvider):
                         continue
                     try:
                         import json
+
                         event = json.loads(line[6:])
                         if event.get("type") == "content_block_delta":
                             text = event.get("delta", {}).get("text", "")
@@ -405,6 +413,7 @@ def create_provider(config: AIConfig) -> BaseAIProvider:
 def get_default_config() -> AIConfig:
     """Load AI config from environment variables."""
     import os
+
     provider_str = os.getenv("AI_PROVIDER", "ollama").lower()
     try:
         provider = AIProvider(provider_str)

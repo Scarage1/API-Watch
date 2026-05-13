@@ -5,9 +5,10 @@ Executes all requests in a monitor's collection, evaluates assertions,
 records a MonitorRun, and fires alerts when consecutive failures breach
 the threshold.
 """
-import time
+
 import logging
-from typing import Optional, List
+import time
+from datetime import UTC
 
 import httpx
 from sqlalchemy import select
@@ -16,14 +17,20 @@ from sqlalchemy.orm import selectinload
 
 from .database import _get_session_factory
 from .models import (
-    Monitor, MonitorRun, MonitorStatus, Collection, SavedRequest,
-    MonitorNotification, NotificationChannel, _utcnow,
+    Collection,
+    Monitor,
+    MonitorNotification,
+    MonitorRun,
+    MonitorStatus,
+    SavedRequest,
+    _utcnow,
 )
 
 logger = logging.getLogger(__name__)
 
 
 # ── Assertion evaluator ──────────────────────────────────────────────────────
+
 
 def evaluate_assertion(assertion: dict, response: dict) -> dict:
     """Evaluate a single assertion against a response.
@@ -64,13 +71,17 @@ def evaluate_assertion(assertion: dict, response: dict) -> dict:
             body = response.get("body", "") or ""
             result["actual"] = f"...{len(body)} chars..."
             result["passed"] = expected in body
-            result["message"] = f"Body {'contains' if result['passed'] else 'does not contain'} '{expected}'"
+            result["message"] = (
+                f"Body {'contains' if result['passed'] else 'does not contain'} '{expected}'"
+            )
 
         elif a_type == "header_exists":
             headers = response.get("headers", {})
             result["actual"] = list(headers.keys()) if headers else []
             result["passed"] = expected.lower() in {k.lower() for k in headers}
-            result["message"] = f"Header '{expected}' {'exists' if result['passed'] else 'not found'}"
+            result["message"] = (
+                f"Header '{expected}' {'exists' if result['passed'] else 'not found'}"
+            )
 
         else:
             result["message"] = f"Unknown assertion type: {a_type}"
@@ -82,6 +93,7 @@ def evaluate_assertion(assertion: dict, response: dict) -> dict:
 
 
 # ── Request executor ─────────────────────────────────────────────────────────
+
 
 async def _execute_request(req: SavedRequest) -> dict:
     """Execute a single saved request and return results dict."""
@@ -139,7 +151,8 @@ async def _execute_request(req: SavedRequest) -> dict:
 
 # ── Main executor ────────────────────────────────────────────────────────────
 
-async def execute_monitor(monitor_id: str) -> Optional[MonitorRun]:
+
+async def execute_monitor(monitor_id: str) -> MonitorRun | None:
     """Execute a monitor: run all collection requests, evaluate assertions,
     record results, fire alerts if needed. Designed for background execution."""
     session_factory = _get_session_factory()
@@ -151,7 +164,7 @@ async def execute_monitor(monitor_id: str) -> Optional[MonitorRun]:
             return None
 
 
-async def _run_monitor(db: AsyncSession, monitor_id: str) -> Optional[MonitorRun]:
+async def _run_monitor(db: AsyncSession, monitor_id: str) -> MonitorRun | None:
     """Core monitor execution logic."""
     # Load monitor with collection + requests
     result = await db.execute(
@@ -198,12 +211,14 @@ async def _run_monitor(db: AsyncSession, monitor_id: str) -> Optional[MonitorRun
             failed_requests += 1
 
         # Evaluate assertions for each response
-        for assertion in (monitor.assertions or []):
+        for assertion in monitor.assertions or []:
             a_result = evaluate_assertion(assertion, req_result)
-            all_assertion_results.append({
-                "request_name": req.name,
-                **a_result,
-            })
+            all_assertion_results.append(
+                {
+                    "request_name": req.name,
+                    **a_result,
+                }
+            )
 
     # Compute results
     elapsed_ms = int((time.time() - start_time) * 1000)
@@ -240,10 +255,12 @@ async def _run_monitor(db: AsyncSession, monitor_id: str) -> Optional[MonitorRun
 
     # Compute next_run_at
     try:
+        from datetime import datetime
+
         from croniter import croniter
-        from datetime import datetime, timezone
+
         cron = croniter(monitor.cron_expression, now)
-        monitor.next_run_at = datetime.fromtimestamp(cron.get_next(ret_type=float), tz=timezone.utc)
+        monitor.next_run_at = datetime.fromtimestamp(cron.get_next(ret_type=float), tz=UTC)
     except Exception:
         pass
 

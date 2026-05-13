@@ -1,16 +1,16 @@
 """
 Tests for server-side environment variable interpolation.
 """
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
 from src.api_server import (
-    interpolate_string,
-    interpolate_dict,
     interpolate_body,
+    interpolate_dict,
+    interpolate_string,
 )
 
 

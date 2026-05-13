@@ -8,14 +8,15 @@ Each agent is a specialized AI capability:
 
 Agents are stateless, composable, and provider-agnostic.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
-from src.ai.providers import BaseAIProvider, ChatMessage, AIResponse
+from src.ai.providers import AIResponse, BaseAIProvider, ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class BaseAgent:
     def __init__(self, provider: BaseAIProvider):
         self.provider = provider
 
-    def _build_messages(self, system: str, user: str) -> List[ChatMessage]:
+    def _build_messages(self, system: str, user: str) -> list[ChatMessage]:
         return [
             ChatMessage(role="system", content=system),
             ChatMessage(role="user", content=user),
@@ -72,8 +73,8 @@ class TestGeneratorAgent(BaseAgent):
         method: str,
         url: str,
         status_code: int,
-        response_body: Optional[str],
-        response_headers: Dict[str, str],
+        response_body: str | None,
+        response_headers: dict[str, str],
         response_time: float,
     ) -> AIResponse:
         """Generate test assertions for a response."""
@@ -88,8 +89,8 @@ class TestGeneratorAgent(BaseAgent):
         method: str,
         url: str,
         status_code: int,
-        response_body: Optional[str],
-        response_headers: Dict[str, str],
+        response_body: str | None,
+        response_headers: dict[str, str],
         response_time: float,
     ) -> AsyncIterator[str]:
         """Stream test assertions for a response."""
@@ -105,8 +106,8 @@ class TestGeneratorAgent(BaseAgent):
         method: str,
         url: str,
         status_code: int,
-        response_body: Optional[str],
-        response_headers: Dict[str, str],
+        response_body: str | None,
+        response_headers: dict[str, str],
         response_time: float,
     ) -> str:
         # Truncate large response bodies to stay within context window
@@ -154,18 +155,25 @@ class DebugAssistantAgent(BaseAgent):
         self,
         method: str,
         url: str,
-        status_code: Optional[int],
-        request_headers: Dict[str, str],
-        request_body: Optional[str],
-        response_body: Optional[str],
-        response_headers: Dict[str, str],
-        error: Optional[str],
-        error_type: Optional[str],
+        status_code: int | None,
+        request_headers: dict[str, str],
+        request_body: str | None,
+        response_body: str | None,
+        response_headers: dict[str, str],
+        error: str | None,
+        error_type: str | None,
     ) -> AIResponse:
         """Analyze a failed request and suggest fixes."""
         user_prompt = self._build_context(
-            method, url, status_code, request_headers, request_body,
-            response_body, response_headers, error, error_type,
+            method,
+            url,
+            status_code,
+            request_headers,
+            request_body,
+            response_body,
+            response_headers,
+            error,
+            error_type,
         )
         messages = self._build_messages(DEBUG_SYSTEM, user_prompt)
         return await self.provider.complete(messages)
@@ -174,18 +182,25 @@ class DebugAssistantAgent(BaseAgent):
         self,
         method: str,
         url: str,
-        status_code: Optional[int],
-        request_headers: Dict[str, str],
-        request_body: Optional[str],
-        response_body: Optional[str],
-        response_headers: Dict[str, str],
-        error: Optional[str],
-        error_type: Optional[str],
+        status_code: int | None,
+        request_headers: dict[str, str],
+        request_body: str | None,
+        response_body: str | None,
+        response_headers: dict[str, str],
+        error: str | None,
+        error_type: str | None,
     ) -> AsyncIterator[str]:
         """Stream debug analysis."""
         user_prompt = self._build_context(
-            method, url, status_code, request_headers, request_body,
-            response_body, response_headers, error, error_type,
+            method,
+            url,
+            status_code,
+            request_headers,
+            request_body,
+            response_body,
+            response_headers,
+            error,
+            error_type,
         )
         messages = self._build_messages(DEBUG_SYSTEM, user_prompt)
         async for token in self.provider.stream(messages):
@@ -195,13 +210,13 @@ class DebugAssistantAgent(BaseAgent):
         self,
         method: str,
         url: str,
-        status_code: Optional[int],
-        request_headers: Dict[str, str],
-        request_body: Optional[str],
-        response_body: Optional[str],
-        response_headers: Dict[str, str],
-        error: Optional[str],
-        error_type: Optional[str],
+        status_code: int | None,
+        request_headers: dict[str, str],
+        request_body: str | None,
+        response_body: str | None,
+        response_headers: dict[str, str],
+        error: str | None,
+        error_type: str | None,
     ) -> str:
         body_preview = (response_body or "")[:3000]
         req_body_preview = (request_body or "")[:2000]
@@ -261,7 +276,7 @@ class RequestBuilderAgent(BaseAgent):
         async for token in self.provider.stream(messages):
             yield token
 
-    def parse_response(self, content: str) -> Optional[Dict[str, Any]]:
+    def parse_response(self, content: str) -> dict[str, Any] | None:
         """Parse the AI response into a request configuration dict."""
         try:
             # Try to extract JSON from the response

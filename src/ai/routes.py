@@ -8,14 +8,13 @@ Endpoints:
   POST /api/v1/ai/debug           — Debug failed request (streaming)
   POST /api/v1/ai/build-request   — NL → HTTP request (streaming)
 """
+
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-from typing import Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -41,8 +40,8 @@ class TestGenRequest(BaseModel):
     method: str
     url: str
     status_code: int
-    response_body: Optional[str] = None
-    response_headers: Dict[str, str] = Field(default_factory=dict)
+    response_body: str | None = None
+    response_headers: dict[str, str] = Field(default_factory=dict)
     response_time: float = 0.0
     stream: bool = True
 
@@ -50,13 +49,13 @@ class TestGenRequest(BaseModel):
 class DebugRequest(BaseModel):
     method: str
     url: str
-    status_code: Optional[int] = None
-    request_headers: Dict[str, str] = Field(default_factory=dict)
-    request_body: Optional[str] = None
-    response_body: Optional[str] = None
-    response_headers: Dict[str, str] = Field(default_factory=dict)
-    error: Optional[str] = None
-    error_type: Optional[str] = None
+    status_code: int | None = None
+    request_headers: dict[str, str] = Field(default_factory=dict)
+    request_body: str | None = None
+    response_body: str | None = None
+    response_headers: dict[str, str] = Field(default_factory=dict)
+    error: str | None = None
+    error_type: str | None = None
     stream: bool = True
 
 
@@ -107,7 +106,7 @@ async def update_ai_config(config_update: AIConfigUpdate):
         raise HTTPException(
             status_code=400,
             detail=f"Unknown provider: {config_update.provider}. "
-                   f"Supported: {', '.join(p.value for p in AIProvider)}",
+            f"Supported: {', '.join(p.value for p in AIProvider)}",
         )
 
     config = AIConfig(

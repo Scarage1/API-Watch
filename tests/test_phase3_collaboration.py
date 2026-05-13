@@ -8,14 +8,16 @@ Covers:
   - Activity logging (auto-logged events, query & filter)
   - Environment scope & secrets masking
 """
-import pytest
-from typing import Optional
-from httpx import AsyncClient
 
+import pytest
+from httpx import AsyncClient
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def register_user(client: AsyncClient, email: str, username: str, password: str = "TestPass123"):
+
+async def register_user(
+    client: AsyncClient, email: str, username: str, password: str = "TestPass123"
+):
     res = await client.post(
         "/api/v1/auth/register",
         json={"email": email, "username": username, "password": password},
@@ -37,7 +39,10 @@ async def create_workspace(client: AsyncClient, headers: dict, name: str):
 
 
 async def create_collection(
-    client: AsyncClient, headers: dict, name: str, workspace_id: Optional[str] = None,
+    client: AsyncClient,
+    headers: dict,
+    name: str,
+    workspace_id: str | None = None,
 ) -> dict:
     h = {**headers}
     if workspace_id:
@@ -48,8 +53,12 @@ async def create_collection(
 
 
 async def save_request(
-    client: AsyncClient, headers: dict, collection_id: str, name: str,
-    method: str = "GET", url: str = "https://api.example.com/test",
+    client: AsyncClient,
+    headers: dict,
+    collection_id: str,
+    name: str,
+    method: str = "GET",
+    url: str = "https://api.example.com/test",
 ):
     res = await client.post(
         f"/api/v1/collections/{collection_id}/requests",
@@ -71,8 +80,8 @@ async def save_request(
 #  COLLECTION SHARING
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestCollectionSharing:
 
+class TestCollectionSharing:
     @pytest.mark.asyncio
     async def test_share_collection_with_workspace(self, client: AsyncClient):
         """Owner shares collection with another workspace."""
@@ -243,8 +252,8 @@ class TestCollectionSharing:
 #  COLLECTION FORKING
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestCollectionForking:
 
+class TestCollectionForking:
     @pytest.mark.asyncio
     async def test_fork_own_collection(self, client: AsyncClient):
         """Fork a collection the user owns."""
@@ -318,8 +327,12 @@ class TestCollectionForking:
         methods = ["GET", "POST", "PUT", "DELETE", "PATCH"]
         for i, m in enumerate(methods):
             await save_request(
-                client, {**headers, "X-Workspace-Id": ws_id},
-                col["id"], f"Req {m}", m, f"https://api.example.com/{m.lower()}"
+                client,
+                {**headers, "X-Workspace-Id": ws_id},
+                col["id"],
+                f"Req {m}",
+                m,
+                f"https://api.example.com/{m.lower()}",
             )
 
         fork_res = await client.post(
@@ -334,8 +347,8 @@ class TestCollectionForking:
 #  COLLECTION VERSIONING (SNAPSHOTS)
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestCollectionVersioning:
 
+class TestCollectionVersioning:
     @pytest.mark.asyncio
     async def test_create_snapshot(self, client: AsyncClient):
         """Create a snapshot of a collection."""
@@ -401,7 +414,9 @@ class TestCollectionVersioning:
         headers, user = await auth_headers(client, "ver4@test.dev", "ver4")
         ws_id = user["default_workspace_id"]
         col = await create_collection(client, headers, "Detail Snap", ws_id)
-        await save_request(client, {**headers, "X-Workspace-Id": ws_id}, col["id"], "Detailed Req", "POST")
+        await save_request(
+            client, {**headers, "X-Workspace-Id": ws_id}, col["id"], "Detailed Req", "POST"
+        )
 
         snap_res = await client.post(
             f"/api/v1/collections/{col['id']}/snapshots",
@@ -510,8 +525,8 @@ class TestCollectionVersioning:
 #  ACTIVITY LOGGING
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestActivityLog:
 
+class TestActivityLog:
     @pytest.mark.asyncio
     async def test_activity_logged_on_collection_create(self, client: AsyncClient):
         """Creating a collection should log an activity."""
@@ -526,7 +541,9 @@ class TestActivityLog:
         assert res.status_code == 200
         logs = res.json()
         assert len(logs) >= 1
-        assert any(log["action"] == "created" and "Logged Col" in log["resource_name"] for log in logs)
+        assert any(
+            log["action"] == "created" and "Logged Col" in log["resource_name"] for log in logs
+        )
 
     @pytest.mark.asyncio
     async def test_activity_logged_on_share(self, client: AsyncClient):
@@ -534,7 +551,9 @@ class TestActivityLog:
         headers, user = await auth_headers(client, "act2@test.dev", "act2")
         ws_id = user["default_workspace_id"]
         ws2 = await create_workspace(client, headers, "Act WS2")
-        col = await create_collection(client, {**headers, "X-Workspace-Id": ws_id}, "Act Col", ws_id)
+        col = await create_collection(
+            client, {**headers, "X-Workspace-Id": ws_id}, "Act Col", ws_id
+        )
 
         await client.post(
             f"/api/v1/collections/{col['id']}/share",
@@ -556,7 +575,9 @@ class TestActivityLog:
         """Forking a collection should log a 'forked' activity."""
         headers, user = await auth_headers(client, "act3@test.dev", "act3")
         ws_id = user["default_workspace_id"]
-        col = await create_collection(client, {**headers, "X-Workspace-Id": ws_id}, "Fork Act", ws_id)
+        col = await create_collection(
+            client, {**headers, "X-Workspace-Id": ws_id}, "Fork Act", ws_id
+        )
 
         await client.post(
             f"/api/v1/collections/{col['id']}/fork",
@@ -591,7 +612,9 @@ class TestActivityLog:
         """Filter activity by resource_type."""
         headers, user = await auth_headers(client, "act5@test.dev", "act5")
         ws_id = user["default_workspace_id"]
-        col = await create_collection(client, {**headers, "X-Workspace-Id": ws_id}, "Filter Col", ws_id)
+        col = await create_collection(
+            client, {**headers, "X-Workspace-Id": ws_id}, "Filter Col", ws_id
+        )
 
         # Create a snapshot too
         await client.post(
@@ -618,7 +641,10 @@ class TestActivityLog:
         # Create 5 collections to generate 5 log entries
         for i in range(5):
             await create_collection(
-                client, {**headers, "X-Workspace-Id": ws_id}, f"Page Col {i}", ws_id,
+                client,
+                {**headers, "X-Workspace-Id": ws_id},
+                f"Page Col {i}",
+                ws_id,
             )
 
         res = await client.get(
@@ -640,7 +666,9 @@ class TestActivityLog:
         """Deleting a collection should log 'deleted' activity."""
         headers, user = await auth_headers(client, "act7@test.dev", "act7")
         ws_id = user["default_workspace_id"]
-        col = await create_collection(client, {**headers, "X-Workspace-Id": ws_id}, "Del Act", ws_id)
+        col = await create_collection(
+            client, {**headers, "X-Workspace-Id": ws_id}, "Del Act", ws_id
+        )
 
         await client.delete(
             f"/api/v1/collections/{col['id']}",
@@ -660,8 +688,8 @@ class TestActivityLog:
 #  ENVIRONMENT SCOPE & SECRETS
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestEnvironmentScope:
 
+class TestEnvironmentScope:
     @pytest.mark.asyncio
     async def test_create_environment_with_scope(self, client: AsyncClient):
         """Create environment with workspace scope."""

@@ -2,22 +2,25 @@
 Phase 1A security hardening tests.
 Tests for SEC-01 through SEC-20 fixes.
 """
+
 import sys
-import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from datetime import UTC
+
 import pytest
 from httpx import AsyncClient
 
-
 # ───────────── SEC-01: JWT Secret Key Required ─────────────
+
 
 class TestJWTSecretEnforcement:
     def test_secret_key_is_not_hardcoded_default(self):
         """SEC-01: Verify the hardcoded fallback 'api-watch-dev-secret-change-in-production' is gone."""
         from src.config import get_settings
+
         settings = get_settings()
         assert settings.jwt_secret_key != "api-watch-dev-secret-change-in-production"
         assert len(settings.jwt_secret_key) > 10  # must be non-trivial
@@ -25,22 +28,26 @@ class TestJWTSecretEnforcement:
 
 # ───────────── SEC-02: CORS Configuration ─────────────
 
+
 class TestCORSConfiguration:
     def test_cors_not_wildcard(self):
         """SEC-02: CORS should not use wildcard origins."""
         from src.config import get_settings
+
         origins = get_settings().cors_origins_list
         assert "*" not in origins
 
     def test_cors_reads_from_env(self):
         """SEC-02: CORS origins should be configurable via environment."""
         from src.config import get_settings
+
         origins = get_settings().cors_origins_list
         assert isinstance(origins, list)
         assert len(origins) > 0
 
 
 # ───────────── SEC-03/04: Auth Required on Legacy Endpoints ─────────────
+
 
 class TestLegacyEndpointAuth:
     @pytest.mark.asyncio
@@ -67,6 +74,7 @@ class TestLegacyEndpointAuth:
 
 
 # ───────────── SEC-06: Password Validation ─────────────
+
 
 class TestPasswordValidation:
     @pytest.mark.asyncio
@@ -119,6 +127,7 @@ class TestPasswordValidation:
 
 # ───────────── SEC-07: Email Validation ─────────────
 
+
 class TestEmailValidation:
     @pytest.mark.asyncio
     async def test_invalid_email_rejected(self, client: AsyncClient):
@@ -160,6 +169,7 @@ class TestEmailValidation:
 
 # ───────────── Username Validation ─────────────
 
+
 class TestUsernameValidation:
     @pytest.mark.asyncio
     async def test_short_username_rejected(self, client: AsyncClient):
@@ -181,6 +191,7 @@ class TestUsernameValidation:
 
 
 # ───────────── SSRF Protection ─────────────
+
 
 class TestSSRFProtection:
     @pytest.mark.asyncio
@@ -271,6 +282,7 @@ class TestSSRFProtection:
 
 # ───────────── SEC-13: Mock exclude_unset Fix ─────────────
 
+
 class TestMockExcludeUnset:
     @pytest.mark.asyncio
     async def test_update_mock_can_set_null_description(self, auth_client):
@@ -302,14 +314,16 @@ class TestMockExcludeUnset:
 
 # ───────────── SEC-11: Datetime Timezone Awareness ─────────────
 
+
 class TestDatetimeTimezone:
     def test_models_use_utcnow_replacement(self):
         """SEC-11: Models should use _utcnow() not datetime.utcnow()."""
+
         from src.models import _utcnow
-        from datetime import timezone
+
         now = _utcnow()
         assert now.tzinfo is not None
-        assert now.tzinfo == timezone.utc
+        assert now.tzinfo == UTC
 
     @pytest.mark.asyncio
     async def test_created_at_has_value(self, auth_client):
@@ -325,6 +339,7 @@ class TestDatetimeTimezone:
 
 # ───────────── SEC-20: Dead Code Removed ─────────────
 
+
 class TestDeadCodeRemoved:
     def test_webhook_server_deleted(self):
         """SEC-20: src/webhook_server.py should no longer exist."""
@@ -332,6 +347,7 @@ class TestDeadCodeRemoved:
 
 
 # ───────────── Webhook Endpoint Still Works ─────────────
+
 
 class TestWebhookSanitisation:
     @pytest.mark.asyncio
@@ -349,16 +365,19 @@ class TestWebhookSanitisation:
 
 # ───────────── Config Module ─────────────
 
+
 class TestConfigModule:
     def test_settings_is_singleton(self):
         """get_settings() should return the same cached instance."""
         from src.config import get_settings
+
         s1 = get_settings()
         s2 = get_settings()
         assert s1 is s2
 
     def test_settings_has_required_fields(self):
         from src.config import get_settings
+
         s = get_settings()
         assert s.app_name == "API-Watch"
         assert s.jwt_secret_key  # must be non-empty
@@ -367,6 +386,7 @@ class TestConfigModule:
 
     def test_settings_is_sqlite_in_test(self):
         from src.config import get_settings
+
         s = get_settings()
         assert s.is_sqlite
         assert not s.is_postgres
@@ -374,10 +394,12 @@ class TestConfigModule:
 
 # ───────────── Cache Module ─────────────
 
+
 class TestCacheModule:
     @pytest.mark.asyncio
     async def test_in_memory_set_get(self):
         from src.cache import get_cache
+
         cache = get_cache()
         await cache.set("testkey", "testval", ttl=60)
         val = await cache.get("testkey")
@@ -386,6 +408,7 @@ class TestCacheModule:
     @pytest.mark.asyncio
     async def test_in_memory_delete(self):
         from src.cache import get_cache
+
         cache = get_cache()
         await cache.set("delkey", "val")
         await cache.delete("delkey")
@@ -394,6 +417,7 @@ class TestCacheModule:
     @pytest.mark.asyncio
     async def test_in_memory_incr(self):
         from src.cache import get_cache
+
         cache = get_cache()
         v1 = await cache.incr("counter")
         v2 = await cache.incr("counter")
@@ -403,10 +427,12 @@ class TestCacheModule:
     @pytest.mark.asyncio
     async def test_in_memory_ping(self):
         from src.cache import get_cache
+
         assert await get_cache().ping() is True
 
 
 # ───────────── Token Blacklist / Logout ─────────────
+
 
 class TestTokenBlacklist:
     @pytest.mark.asyncio
@@ -431,10 +457,12 @@ class TestTokenBlacklist:
 
 # ───────────── Storage Module ─────────────
 
+
 class TestStorageModule:
     @pytest.mark.asyncio
     async def test_filesystem_write_read(self):
         from src.storage import get_storage
+
         storage = get_storage()
         await storage.write("test/hello.txt", "world")
         content = await storage.read("test/hello.txt")
@@ -443,6 +471,7 @@ class TestStorageModule:
     @pytest.mark.asyncio
     async def test_filesystem_delete(self):
         from src.storage import get_storage
+
         storage = get_storage()
         await storage.write("test/del.txt", "data")
         assert await storage.exists("test/del.txt")
@@ -452,6 +481,7 @@ class TestStorageModule:
     @pytest.mark.asyncio
     async def test_filesystem_list(self):
         from src.storage import get_storage
+
         storage = get_storage()
         await storage.write("listtest/a.txt", "a")
         await storage.write("listtest/b.txt", "b")
@@ -460,6 +490,7 @@ class TestStorageModule:
 
 
 # ───────────── Enhanced Health Check ─────────────
+
 
 class TestEnhancedHealthCheck:
     @pytest.mark.asyncio
@@ -476,14 +507,17 @@ class TestEnhancedHealthCheck:
 
 # ───────────── Database Module ─────────────
 
+
 class TestDatabaseModule:
     @pytest.mark.asyncio
     async def test_db_health_check(self):
         from src.database import check_db_health
+
         assert await check_db_health() is True
 
 
 # ───────────── Alembic ─────────────
+
 
 class TestAlembicSetup:
     def test_alembic_ini_exists(self):

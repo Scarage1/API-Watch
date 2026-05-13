@@ -1,14 +1,14 @@
 """
 Activity log routes — workspace-level mutation history.
 """
-from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import User, ActivityLog
 from ..jwt_auth import get_current_user
+from ..models import ActivityLog, User
 from ..rbac import get_workspace_id
 
 # In-memory cache of user emails to avoid repeated lookups
@@ -19,11 +19,11 @@ router = APIRouter(prefix="/activity", tags=["Activity"])
 
 @router.get("")
 async def list_activity(
-    resource_type: Optional[str] = Query(None, description="Filter by resource type"),
+    resource_type: str | None = Query(None, description="Filter by resource type"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List activity log entries for the current workspace.

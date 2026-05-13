@@ -1,11 +1,13 @@
 """
 Utility functions for the API debugging toolkit.
 """
-import os
+
 import json
+import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
+
 from dotenv import load_dotenv
 
 
@@ -14,14 +16,14 @@ def load_env() -> None:
     load_dotenv()
 
 
-def get_env_var(key: str, default: Optional[str] = None) -> Optional[str]:
+def get_env_var(key: str, default: str | None = None) -> str | None:
     """
     Get environment variable value.
-    
+
     Args:
         key: Environment variable name
         default: Default value if not found
-        
+
     Returns:
         Environment variable value or default
     """
@@ -31,10 +33,10 @@ def get_env_var(key: str, default: Optional[str] = None) -> Optional[str]:
 def ensure_directory(path: str) -> Path:
     """
     Ensure directory exists, create if it doesn't.
-    
+
     Args:
         path: Directory path
-        
+
     Returns:
         Path object
     """
@@ -46,7 +48,7 @@ def ensure_directory(path: str) -> Path:
 def get_timestamp() -> str:
     """
     Get current timestamp in a filename-safe format.
-    
+
     Returns:
         Timestamp string (YYYYMMDD_HHMMSS)
     """
@@ -56,7 +58,7 @@ def get_timestamp() -> str:
 def get_iso_timestamp() -> str:
     """
     Get current timestamp in ISO format.
-    
+
     Returns:
         ISO timestamp string
     """
@@ -66,14 +68,14 @@ def get_iso_timestamp() -> str:
 def format_bytes(bytes_size: int) -> str:
     """
     Format bytes to human-readable size.
-    
+
     Args:
         bytes_size: Size in bytes
-        
+
     Returns:
         Formatted string (e.g., "1.5 KB")
     """
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if bytes_size < 1024.0:
             return f"{bytes_size:.2f} {unit}"
         bytes_size /= 1024.0
@@ -83,10 +85,10 @@ def format_bytes(bytes_size: int) -> str:
 def format_duration(seconds: float) -> str:
     """
     Format duration in seconds to human-readable format.
-    
+
     Args:
         seconds: Duration in seconds
-        
+
     Returns:
         Formatted string (e.g., "1.23s")
     """
@@ -95,13 +97,13 @@ def format_duration(seconds: float) -> str:
     return f"{seconds:.2f}s"
 
 
-def safe_json_parse(json_string: str) -> Optional[Dict[str, Any]]:
+def safe_json_parse(json_string: str) -> dict[str, Any] | None:
     """
     Safely parse JSON string.
-    
+
     Args:
         json_string: JSON string to parse
-        
+
     Returns:
         Parsed dictionary or None if invalid
     """
@@ -114,11 +116,11 @@ def safe_json_parse(json_string: str) -> Optional[Dict[str, Any]]:
 def safe_json_dump(data: Any, indent: int = 2) -> str:
     """
     Safely dump data to JSON string.
-    
+
     Args:
         data: Data to dump
         indent: Indentation level
-        
+
     Returns:
         JSON string
     """
@@ -131,43 +133,43 @@ def safe_json_dump(data: Any, indent: int = 2) -> str:
 def truncate_string(text: str, max_length: int = 100) -> str:
     """
     Truncate string to max length.
-    
+
     Args:
         text: String to truncate
         max_length: Maximum length
-        
+
     Returns:
         Truncated string
     """
     if len(text) <= max_length:
         return text
-    return text[:max_length - 3] + "..."
+    return text[: max_length - 3] + "..."
 
 
 def sanitize_filename(filename: str) -> str:
     """
     Sanitize filename by removing invalid characters.
-    
+
     Args:
         filename: Original filename
-        
+
     Returns:
         Sanitized filename
     """
     invalid_chars = '<>:"/\\|?*'
     for char in invalid_chars:
-        filename = filename.replace(char, '_')
+        filename = filename.replace(char, "_")
     return filename
 
 
-def merge_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+def merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """
     Merge two dictionaries, with override taking precedence.
-    
+
     Args:
         base: Base dictionary
         override: Override dictionary
-        
+
     Returns:
         Merged dictionary
     """

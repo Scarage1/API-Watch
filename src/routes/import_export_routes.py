@@ -1,16 +1,17 @@
 """
 Import/Export routes — upload Postman collections, export as Postman or OpenAPI.
 """
+
 import json
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import User, Collection, SavedRequest, ActivityLog, ActivityAction
 from ..jwt_auth import get_current_user_or_apikey as get_current_user
+from ..models import ActivityAction, ActivityLog, Collection, SavedRequest, User
 from ..rbac import get_workspace_id
 
 router = APIRouter(prefix="/import-export", tags=["Import/Export"])
@@ -18,11 +19,12 @@ router = APIRouter(prefix="/import-export", tags=["Import/Export"])
 
 # ── Import ────────────────────────────────────────────────────────────────────
 
+
 @router.post("/import/postman", status_code=201)
 async def import_postman(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Import a Postman Collection v2.1 JSON file."""
@@ -74,9 +76,12 @@ async def import_postman(
         db.add(saved)
 
     log = ActivityLog(
-        workspace_id=workspace_id, user_id=user.id,
-        action=ActivityAction.CREATED, resource_type="collection",
-        resource_id=collection.id, resource_name=f"[Imported] {parsed['name']}",
+        workspace_id=workspace_id,
+        user_id=user.id,
+        action=ActivityAction.CREATED,
+        resource_type="collection",
+        resource_id=collection.id,
+        resource_name=f"[Imported] {parsed['name']}",
     )
     db.add(log)
 
@@ -93,11 +98,12 @@ async def import_postman(
 
 # ── Export Postman ────────────────────────────────────────────────────────────
 
+
 @router.get("/export/postman/{collection_id}")
 async def export_postman(
     collection_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Export a collection as Postman Collection v2.1 JSON."""
@@ -126,11 +132,12 @@ async def export_postman(
 
 # ── Export OpenAPI ────────────────────────────────────────────────────────────
 
+
 @router.get("/export/openapi/{collection_id}")
 async def export_openapi(
     collection_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Export a collection as OpenAPI 3.0.3 specification."""
@@ -159,17 +166,19 @@ async def export_openapi(
 
 # ── Export JUnit ──────────────────────────────────────────────────────────────
 
+
 @router.get("/export/junit/{monitor_id}/runs/{run_id}")
 async def export_junit(
     monitor_id: str,
     run_id: str,
     user: User = Depends(get_current_user),
-    workspace_id: Optional[str] = Depends(get_workspace_id),
+    workspace_id: str | None = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Export a monitor run as JUnit XML (for CI pipeline integration)."""
-    from ..models import Monitor, MonitorRun
     from fastapi.responses import Response
+
+    from ..models import Monitor, MonitorRun
 
     # Verify access
     query = select(Monitor).where(Monitor.id == monitor_id)
@@ -183,7 +192,8 @@ async def export_junit(
         raise HTTPException(status_code=404, detail="Monitor not found")
 
     run_q = select(MonitorRun).where(
-        MonitorRun.id == run_id, MonitorRun.monitor_id == monitor_id,
+        MonitorRun.id == run_id,
+        MonitorRun.monitor_id == monitor_id,
     )
     result = await db.execute(run_q)
     run = result.scalar_one_or_none()
@@ -197,6 +207,7 @@ async def export_junit(
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 async def _load_collection(db, collection_id: str, user, workspace_id):
     """Load a collection with requests, verifying access."""

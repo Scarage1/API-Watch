@@ -2,6 +2,7 @@
 Tests for FastAPI API server endpoints.
 Uses httpx AsyncClient + pytest-asyncio.
 """
+
 import sys
 from pathlib import Path
 
@@ -10,8 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pytest
 from httpx import AsyncClient
 
-
 # ───────────── Health & Root ─────────────
+
 
 class TestHealthEndpoint:
     @pytest.mark.asyncio
@@ -41,6 +42,7 @@ class TestRootEndpoint:
 
 
 # ───────────── Auth ─────────────
+
 
 class TestAuthRegister:
     @pytest.mark.asyncio
@@ -125,6 +127,7 @@ class TestAuthProfile:
 
 # ───────────── Collections ─────────────
 
+
 class TestCollections:
     @pytest.mark.asyncio
     async def test_create_collection(self, auth_client):
@@ -182,6 +185,7 @@ class TestCollections:
 
 # ───────────── Saved Requests ─────────────
 
+
 class TestSavedRequests:
     @pytest.mark.asyncio
     async def test_create_request(self, auth_client):
@@ -228,6 +232,7 @@ class TestSavedRequests:
 
 # ───────────── Environments ─────────────
 
+
 class TestEnvironments:
     @pytest.mark.asyncio
     async def test_create_environment(self, auth_client):
@@ -267,6 +272,7 @@ class TestEnvironments:
 
 # ───────────── History ─────────────
 
+
 class TestHistory:
     @pytest.mark.asyncio
     async def test_empty_history(self, auth_client):
@@ -289,6 +295,7 @@ class TestHistory:
 
 # ───────────── Legacy Endpoints ─────────────
 
+
 class TestExecuteRequest:
     @pytest.mark.asyncio
     async def test_valid_get_request(self, auth_client):
@@ -308,7 +315,11 @@ class TestExecuteRequest:
         client, _, _ = auth_client
         response = await client.post(
             "/api/execute-request",
-            json={"method": "GET", "url": "https://this-domain-definitely-does-not-exist-xyz123.com", "timeout": 3},
+            json={
+                "method": "GET",
+                "url": "https://this-domain-definitely-does-not-exist-xyz123.com",
+                "timeout": 3,
+            },
         )
         assert response.status_code == 200
         data = response.json()
@@ -339,7 +350,10 @@ class TestExecuteRequest:
             json={"method": "GET", "url": "http://localhost:8080/secret"},
         )
         assert response.status_code == 400
-        assert "localhost" in response.json()["detail"].lower() or "loopback" in response.json()["detail"].lower()
+        assert (
+            "localhost" in response.json()["detail"].lower()
+            or "loopback" in response.json()["detail"].lower()
+        )
 
     @pytest.mark.asyncio
     async def test_ssrf_blocked_private_ip(self, auth_client):
@@ -350,7 +364,10 @@ class TestExecuteRequest:
             json={"method": "GET", "url": "http://192.168.1.1/admin"},
         )
         assert response.status_code == 400
-        assert "private" in response.json()["detail"].lower() or "internal" in response.json()["detail"].lower()
+        assert (
+            "private" in response.json()["detail"].lower()
+            or "internal" in response.json()["detail"].lower()
+        )
 
     @pytest.mark.asyncio
     async def test_ssrf_blocked_non_http(self, auth_client):
@@ -412,7 +429,13 @@ class TestDiagnoseEndpoint:
     async def test_diagnose_401(self, client: AsyncClient):
         response = await client.post(
             "/api/diagnose",
-            json={"success": False, "status_code": 401, "response_time": 0.1, "error": "HTTP 401", "error_type": "HTTP_ERROR"},
+            json={
+                "success": False,
+                "status_code": 401,
+                "response_time": 0.1,
+                "error": "HTTP 401",
+                "error_type": "HTTP_ERROR",
+            },
         )
         assert response.status_code == 200
         assert response.json()["category"] == "auth"
@@ -426,7 +449,13 @@ class TestStatsEndpoint:
             json=[
                 {"success": True, "status_code": 200, "response_time": 0.1},
                 {"success": True, "status_code": 200, "response_time": 0.2},
-                {"success": False, "status_code": 500, "response_time": 0.5, "error": "Server Error", "error_type": "HTTP_ERROR"},
+                {
+                    "success": False,
+                    "status_code": 500,
+                    "response_time": 0.5,
+                    "error": "Server Error",
+                    "error_type": "HTTP_ERROR",
+                },
             ],
         )
         assert response.status_code == 200

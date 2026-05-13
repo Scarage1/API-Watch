@@ -11,14 +11,16 @@ Covers:
   - Monitor executor (integration)
   - Manual trigger endpoint
 """
-import pytest
-from typing import Optional
-from httpx import AsyncClient
 
+import pytest
+from httpx import AsyncClient
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def register_user(client: AsyncClient, email: str, username: str, password: str = "TestPass123"):
+
+async def register_user(
+    client: AsyncClient, email: str, username: str, password: str = "TestPass123"
+):
     res = await client.post(
         "/api/v1/auth/register",
         json={"email": email, "username": username, "password": password},
@@ -34,8 +36,10 @@ async def auth_headers(client: AsyncClient, email: str, username: str):
 
 
 async def create_collection(
-    client: AsyncClient, headers: dict, name: str,
-    workspace_id: Optional[str] = None,
+    client: AsyncClient,
+    headers: dict,
+    name: str,
+    workspace_id: str | None = None,
 ) -> dict:
     h = {**headers}
     if workspace_id:
@@ -46,8 +50,12 @@ async def create_collection(
 
 
 async def save_request(
-    client: AsyncClient, headers: dict, collection_id: str, name: str,
-    method: str = "GET", url: str = "https://httpbin.org/get",
+    client: AsyncClient,
+    headers: dict,
+    collection_id: str,
+    name: str,
+    method: str = "GET",
+    url: str = "https://httpbin.org/get",
 ):
     res = await client.post(
         f"/api/v1/collections/{collection_id}/requests",
@@ -66,8 +74,12 @@ async def save_request(
 
 
 async def create_monitor(
-    client: AsyncClient, headers: dict, name: str, collection_id: str,
-    workspace_id: Optional[str] = None, **kwargs,
+    client: AsyncClient,
+    headers: dict,
+    name: str,
+    collection_id: str,
+    workspace_id: str | None = None,
+    **kwargs,
 ) -> dict:
     h = {**headers}
     if workspace_id:
@@ -84,10 +96,12 @@ async def create_monitor(
 
 
 async def create_channel(
-    client: AsyncClient, headers: dict, name: str,
+    client: AsyncClient,
+    headers: dict,
+    name: str,
     channel_type: str = "webhook",
-    config: Optional[dict] = None,
-    workspace_id: Optional[str] = None,
+    config: dict | None = None,
+    workspace_id: str | None = None,
 ) -> dict:
     h = {**headers}
     if workspace_id:
@@ -106,8 +120,8 @@ async def create_channel(
 #  MONITOR CRUD
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestMonitorCRUD:
 
+class TestMonitorCRUD:
     @pytest.mark.asyncio
     async def test_create_monitor(self, client: AsyncClient):
         headers, user = await auth_headers(client, "mon1@test.dev", "mon1")
@@ -184,10 +198,14 @@ class TestMonitorCRUD:
         headers, user = await auth_headers(client, "mon6@test.dev", "mon6")
         ws = user["default_workspace_id"]
         h = {**headers, "X-Workspace-Id": ws}
-        res = await client.post("/api/v1/monitors", json={
-            "name": "Bad Monitor",
-            "collection_id": "nonexistent-id",
-        }, headers=h)
+        res = await client.post(
+            "/api/v1/monitors",
+            json={
+                "name": "Bad Monitor",
+                "collection_id": "nonexistent-id",
+            },
+            headers=h,
+        )
         assert res.status_code == 404
 
     @pytest.mark.asyncio
@@ -195,10 +213,17 @@ class TestMonitorCRUD:
         headers, user = await auth_headers(client, "mon7@test.dev", "mon7")
         ws = user["default_workspace_id"]
         col = await create_collection(client, headers, "Mon Col 7", ws)
-        mon = await create_monitor(client, headers, "Assert Monitor", col["id"], ws, assertions=[
-            {"type": "status_code", "operator": "eq", "value": "200"},
-            {"type": "response_time", "operator": "lt", "value": "5"},
-        ])
+        mon = await create_monitor(
+            client,
+            headers,
+            "Assert Monitor",
+            col["id"],
+            ws,
+            assertions=[
+                {"type": "status_code", "operator": "eq", "value": "200"},
+                {"type": "response_time", "operator": "lt", "value": "5"},
+            ],
+        )
         assert len(mon["assertions"]) == 2
         assert mon["assertions"][0]["type"] == "status_code"
 
@@ -207,8 +232,8 @@ class TestMonitorCRUD:
 #  MONITOR RUN HISTORY
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestMonitorRunHistory:
 
+class TestMonitorRunHistory:
     @pytest.mark.asyncio
     async def test_empty_runs(self, client: AsyncClient):
         headers, user = await auth_headers(client, "run1@test.dev", "run1")
@@ -232,14 +257,15 @@ class TestMonitorRunHistory:
 #  NOTIFICATION CHANNEL CRUD
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestNotificationChannelCRUD:
 
+class TestNotificationChannelCRUD:
     @pytest.mark.asyncio
     async def test_create_webhook_channel(self, client: AsyncClient):
         headers, user = await auth_headers(client, "notif1@test.dev", "notif1")
         ws = user["default_workspace_id"]
-        ch = await create_channel(client, headers, "My Webhook", "webhook",
-                                  {"url": "https://hooks.example.com/test"}, ws)
+        ch = await create_channel(
+            client, headers, "My Webhook", "webhook", {"url": "https://hooks.example.com/test"}, ws
+        )
         assert ch["name"] == "My Webhook"
         assert ch["channel_type"] == "webhook"
         assert ch["enabled"] is True
@@ -248,8 +274,9 @@ class TestNotificationChannelCRUD:
     async def test_create_email_channel(self, client: AsyncClient):
         headers, user = await auth_headers(client, "notif2@test.dev", "notif2")
         ws = user["default_workspace_id"]
-        ch = await create_channel(client, headers, "Email Alerts", "email",
-                                  {"recipients": ["admin@example.com"]}, ws)
+        ch = await create_channel(
+            client, headers, "Email Alerts", "email", {"recipients": ["admin@example.com"]}, ws
+        )
         assert ch["channel_type"] == "email"
         assert "recipients" in ch["config"]
 
@@ -257,18 +284,22 @@ class TestNotificationChannelCRUD:
     async def test_create_slack_channel(self, client: AsyncClient):
         headers, user = await auth_headers(client, "notif3@test.dev", "notif3")
         ws = user["default_workspace_id"]
-        ch = await create_channel(client, headers, "Slack Alerts", "slack",
-                                  {"webhook_url": "https://hooks.slack.com/services/abc"}, ws)
+        ch = await create_channel(
+            client,
+            headers,
+            "Slack Alerts",
+            "slack",
+            {"webhook_url": "https://hooks.slack.com/services/abc"},
+            ws,
+        )
         assert ch["channel_type"] == "slack"
 
     @pytest.mark.asyncio
     async def test_list_channels(self, client: AsyncClient):
         headers, user = await auth_headers(client, "notif4@test.dev", "notif4")
         ws = user["default_workspace_id"]
-        await create_channel(client, headers, "Ch1", "webhook",
-                             {"url": "https://a.com"}, ws)
-        await create_channel(client, headers, "Ch2", "webhook",
-                             {"url": "https://b.com"}, ws)
+        await create_channel(client, headers, "Ch1", "webhook", {"url": "https://a.com"}, ws)
+        await create_channel(client, headers, "Ch2", "webhook", {"url": "https://b.com"}, ws)
 
         h = {**headers, "X-Workspace-Id": ws}
         res = await client.get("/api/v1/notifications", headers=h)
@@ -279,13 +310,16 @@ class TestNotificationChannelCRUD:
     async def test_update_channel(self, client: AsyncClient):
         headers, user = await auth_headers(client, "notif5@test.dev", "notif5")
         ws = user["default_workspace_id"]
-        ch = await create_channel(client, headers, "Update Me", "webhook",
-                                  {"url": "https://old.com"}, ws)
+        ch = await create_channel(
+            client, headers, "Update Me", "webhook", {"url": "https://old.com"}, ws
+        )
 
         h = {**headers, "X-Workspace-Id": ws}
-        res = await client.put(f"/api/v1/notifications/{ch['id']}",
-                               json={"name": "Updated", "config": {"url": "https://new.com"}},
-                               headers=h)
+        res = await client.put(
+            f"/api/v1/notifications/{ch['id']}",
+            json={"name": "Updated", "config": {"url": "https://new.com"}},
+            headers=h,
+        )
         assert res.status_code == 200
         assert res.json()["name"] == "Updated"
 
@@ -293,8 +327,9 @@ class TestNotificationChannelCRUD:
     async def test_delete_channel(self, client: AsyncClient):
         headers, user = await auth_headers(client, "notif6@test.dev", "notif6")
         ws = user["default_workspace_id"]
-        ch = await create_channel(client, headers, "Delete Me", "webhook",
-                                  {"url": "https://del.com"}, ws)
+        ch = await create_channel(
+            client, headers, "Delete Me", "webhook", {"url": "https://del.com"}, ws
+        )
 
         h = {**headers, "X-Workspace-Id": ws}
         res = await client.delete(f"/api/v1/notifications/{ch['id']}", headers=h)
@@ -308,16 +343,22 @@ class TestNotificationChannelCRUD:
 #  CHANNEL VALIDATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestChannelValidation:
 
+class TestChannelValidation:
     @pytest.mark.asyncio
     async def test_invalid_channel_type(self, client: AsyncClient):
         headers, user = await auth_headers(client, "val1@test.dev", "val1")
         ws = user["default_workspace_id"]
         h = {**headers, "X-Workspace-Id": ws}
-        res = await client.post("/api/v1/notifications", json={
-            "name": "Bad", "channel_type": "sms", "config": {},
-        }, headers=h)
+        res = await client.post(
+            "/api/v1/notifications",
+            json={
+                "name": "Bad",
+                "channel_type": "sms",
+                "config": {},
+            },
+            headers=h,
+        )
         assert res.status_code == 400
 
     @pytest.mark.asyncio
@@ -325,9 +366,15 @@ class TestChannelValidation:
         headers, user = await auth_headers(client, "val2@test.dev", "val2")
         ws = user["default_workspace_id"]
         h = {**headers, "X-Workspace-Id": ws}
-        res = await client.post("/api/v1/notifications", json={
-            "name": "Bad Email", "channel_type": "email", "config": {},
-        }, headers=h)
+        res = await client.post(
+            "/api/v1/notifications",
+            json={
+                "name": "Bad Email",
+                "channel_type": "email",
+                "config": {},
+            },
+            headers=h,
+        )
         assert res.status_code == 400
 
     @pytest.mark.asyncio
@@ -335,9 +382,15 @@ class TestChannelValidation:
         headers, user = await auth_headers(client, "val3@test.dev", "val3")
         ws = user["default_workspace_id"]
         h = {**headers, "X-Workspace-Id": ws}
-        res = await client.post("/api/v1/notifications", json={
-            "name": "Bad Webhook", "channel_type": "webhook", "config": {},
-        }, headers=h)
+        res = await client.post(
+            "/api/v1/notifications",
+            json={
+                "name": "Bad Webhook",
+                "channel_type": "webhook",
+                "config": {},
+            },
+            headers=h,
+        )
         assert res.status_code == 400
 
     @pytest.mark.asyncio
@@ -345,9 +398,15 @@ class TestChannelValidation:
         headers, user = await auth_headers(client, "val4@test.dev", "val4")
         ws = user["default_workspace_id"]
         h = {**headers, "X-Workspace-Id": ws}
-        res = await client.post("/api/v1/notifications", json={
-            "name": "Bad Slack", "channel_type": "slack", "config": {},
-        }, headers=h)
+        res = await client.post(
+            "/api/v1/notifications",
+            json={
+                "name": "Bad Slack",
+                "channel_type": "slack",
+                "config": {},
+            },
+            headers=h,
+        )
         assert res.status_code == 400
 
 
@@ -355,17 +414,24 @@ class TestChannelValidation:
 #  MONITOR ↔ CHANNEL LINKING
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestMonitorChannelLinking:
 
+class TestMonitorChannelLinking:
     @pytest.mark.asyncio
     async def test_create_monitor_with_channels(self, client: AsyncClient):
         headers, user = await auth_headers(client, "link1@test.dev", "link1")
         ws = user["default_workspace_id"]
         col = await create_collection(client, headers, "Link Col", ws)
-        ch = await create_channel(client, headers, "Link Channel", "webhook",
-                                  {"url": "https://hooks.example.com/link"}, ws)
-        mon = await create_monitor(client, headers, "Linked Monitor", col["id"], ws,
-                                   channel_ids=[ch["id"]])
+        ch = await create_channel(
+            client,
+            headers,
+            "Link Channel",
+            "webhook",
+            {"url": "https://hooks.example.com/link"},
+            ws,
+        )
+        mon = await create_monitor(
+            client, headers, "Linked Monitor", col["id"], ws, channel_ids=[ch["id"]]
+        )
         assert ch["id"] in mon["channel_ids"]
 
     @pytest.mark.asyncio
@@ -373,12 +439,11 @@ class TestMonitorChannelLinking:
         headers, user = await auth_headers(client, "link2@test.dev", "link2")
         ws = user["default_workspace_id"]
         col = await create_collection(client, headers, "Link Col 2", ws)
-        ch1 = await create_channel(client, headers, "Ch A", "webhook",
-                                   {"url": "https://a.com"}, ws)
-        ch2 = await create_channel(client, headers, "Ch B", "webhook",
-                                   {"url": "https://b.com"}, ws)
-        mon = await create_monitor(client, headers, "Link Mon 2", col["id"], ws,
-                                   channel_ids=[ch1["id"]])
+        ch1 = await create_channel(client, headers, "Ch A", "webhook", {"url": "https://a.com"}, ws)
+        ch2 = await create_channel(client, headers, "Ch B", "webhook", {"url": "https://b.com"}, ws)
+        mon = await create_monitor(
+            client, headers, "Link Mon 2", col["id"], ws, channel_ids=[ch1["id"]]
+        )
 
         h = {**headers, "X-Workspace-Id": ws}
         res = await client.put(
@@ -396,10 +461,11 @@ class TestMonitorChannelLinking:
 #  ASSERTION EVALUATOR (unit-level)
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestAssertionEvaluator:
 
+class TestAssertionEvaluator:
     def test_status_code_eq_pass(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "status_code", "operator": "eq", "value": "200"},
             {"status_code": 200},
@@ -408,6 +474,7 @@ class TestAssertionEvaluator:
 
     def test_status_code_eq_fail(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "status_code", "operator": "eq", "value": "200"},
             {"status_code": 500},
@@ -416,6 +483,7 @@ class TestAssertionEvaluator:
 
     def test_status_code_lt(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "status_code", "operator": "lt", "value": "400"},
             {"status_code": 200},
@@ -424,6 +492,7 @@ class TestAssertionEvaluator:
 
     def test_response_time_lt_pass(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "response_time", "operator": "lt", "value": "2"},
             {"response_time": 0.5},
@@ -432,6 +501,7 @@ class TestAssertionEvaluator:
 
     def test_response_time_lt_fail(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "response_time", "operator": "lt", "value": "0.1"},
             {"response_time": 0.5},
@@ -440,6 +510,7 @@ class TestAssertionEvaluator:
 
     def test_body_contains_pass(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "body_contains", "operator": "eq", "value": "success"},
             {"body": '{"status": "success"}'},
@@ -448,6 +519,7 @@ class TestAssertionEvaluator:
 
     def test_body_contains_fail(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "body_contains", "operator": "eq", "value": "error"},
             {"body": '{"status": "success"}'},
@@ -456,6 +528,7 @@ class TestAssertionEvaluator:
 
     def test_header_exists_pass(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "header_exists", "operator": "eq", "value": "content-type"},
             {"headers": {"Content-Type": "application/json"}},
@@ -464,6 +537,7 @@ class TestAssertionEvaluator:
 
     def test_header_exists_fail(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "header_exists", "operator": "eq", "value": "x-custom"},
             {"headers": {"Content-Type": "application/json"}},
@@ -472,6 +546,7 @@ class TestAssertionEvaluator:
 
     def test_unknown_assertion_type(self):
         from src.monitor_executor import evaluate_assertion
+
         result = evaluate_assertion(
             {"type": "unknown_type", "operator": "eq", "value": "foo"},
             {"status_code": 200},
@@ -483,8 +558,8 @@ class TestAssertionEvaluator:
 #  MANUAL TRIGGER
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestManualTrigger:
 
+class TestManualTrigger:
     @pytest.mark.asyncio
     async def test_trigger_monitor(self, client: AsyncClient):
         headers, user = await auth_headers(client, "trig1@test.dev", "trig1")
@@ -508,17 +583,19 @@ class TestManualTrigger:
 #  NOTIFIER (unit-level)
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestNotifier:
 
+class TestNotifier:
     @pytest.mark.asyncio
     async def test_email_log_mode(self):
         """Email notifier should succeed in log-only mode (no SMTP_HOST)."""
         import os
+
         os.environ.pop("SMTP_HOST", None)
 
-        from src.notifier import _send_email
         from unittest.mock import MagicMock
+
         from src.models import ChannelType
+        from src.notifier import _send_email
 
         channel = MagicMock()
         channel.name = "Test Email"

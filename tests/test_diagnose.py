@@ -1,13 +1,15 @@
 """
 Tests for diagnosis engine.
 """
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from src.diagnose import DiagnosisEngine, Diagnosis
+
+from src.diagnose import Diagnosis, DiagnosisEngine
 from src.runner import RequestResult
 
 

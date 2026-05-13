@@ -4,10 +4,11 @@ Postman Collection v2.1 importer/exporter.
 Handles bidirectional conversion between API-Watch collections and
 Postman Collection Format v2.1.0.
 """
-from typing import Optional, List, Dict, Any
 
+from typing import Any
 
 # ── Postman → API-Watch ──────────────────────────────────────────────────────
+
 
 def import_postman_v2(data: dict) -> dict:
     """Convert a Postman Collection v2.1 JSON into API-Watch format.
@@ -79,7 +80,7 @@ def _parse_request(name: str, req: dict, sort_order: int, folder_prefix: str) ->
         mode = body_data.get("mode", "")
         if mode == "raw":
             body = body_data.get("raw", "")
-            raw_lang = (body_data.get("options", {}).get("raw", {}).get("language", "json"))
+            raw_lang = body_data.get("options", {}).get("raw", {}).get("language", "json")
             body_type = "json" if raw_lang == "json" else "text"
         elif mode == "formdata":
             body = _encode_form_data(body_data.get("formdata", []))
@@ -113,6 +114,7 @@ def _parse_request(name: str, req: dict, sort_order: int, folder_prefix: str) ->
 def _encode_form_data(items: list) -> str:
     """Convert Postman form-data to URL-encoded string."""
     import json
+
     pairs = {}
     for item in items:
         if not item.get("disabled"):
@@ -120,7 +122,7 @@ def _encode_form_data(items: list) -> str:
     return json.dumps(pairs)
 
 
-def _parse_auth(auth_data: dict) -> Optional[dict]:
+def _parse_auth(auth_data: dict) -> dict | None:
     """Parse Postman auth into API-Watch auth_config format."""
     auth_type = auth_data.get("type", "")
     if auth_type == "bearer":
@@ -156,10 +158,11 @@ def _parse_auth(auth_data: dict) -> Optional[dict]:
 
 # ── API-Watch → Postman ──────────────────────────────────────────────────────
 
+
 def export_postman_v2(
     collection_name: str,
-    description: Optional[str],
-    requests: List[dict],
+    description: str | None,
+    requests: list[dict],
 ) -> dict:
     """Convert API-Watch collection + requests into Postman Collection v2.1 format."""
     items = []
@@ -181,17 +184,14 @@ def _build_postman_item(req: dict) -> dict:
     """Build a single Postman item from an API-Watch request."""
     # Headers
     headers_list = [
-        {"key": k, "value": v, "type": "text"}
-        for k, v in (req.get("headers") or {}).items()
+        {"key": k, "value": v, "type": "text"} for k, v in (req.get("headers") or {}).items()
     ]
 
     # URL with query params
-    url_obj: Dict[str, Any] = {"raw": req.get("url", "")}
+    url_obj: dict[str, Any] = {"raw": req.get("url", "")}
     params = req.get("params") or {}
     if params:
-        url_obj["query"] = [
-            {"key": k, "value": v} for k, v in params.items()
-        ]
+        url_obj["query"] = [{"key": k, "value": v} for k, v in params.items()]
 
     # Body
     body_obj = None
@@ -207,10 +207,13 @@ def _build_postman_item(req: dict) -> dict:
         elif body_type == "form":
             try:
                 import json
+
                 pairs = json.loads(body_content)
                 body_obj = {
                     "mode": "urlencoded",
-                    "urlencoded": [{"key": k, "value": v, "type": "text"} for k, v in pairs.items()],
+                    "urlencoded": [
+                        {"key": k, "value": v, "type": "text"} for k, v in pairs.items()
+                    ],
                 }
             except Exception:
                 body_obj = {"mode": "raw", "raw": body_content}
@@ -223,7 +226,7 @@ def _build_postman_item(req: dict) -> dict:
     if auth_config:
         auth_obj = _build_postman_auth(auth_config)
 
-    request_obj: Dict[str, Any] = {
+    request_obj: dict[str, Any] = {
         "method": req.get("method", "GET"),
         "header": headers_list,
         "url": url_obj,
@@ -240,7 +243,7 @@ def _build_postman_item(req: dict) -> dict:
     }
 
 
-def _build_postman_auth(auth_config: dict) -> Optional[dict]:
+def _build_postman_auth(auth_config: dict) -> dict | None:
     """Build Postman auth object from API-Watch auth_config."""
     auth_type = auth_config.get("type", "")
     if auth_type == "bearer":

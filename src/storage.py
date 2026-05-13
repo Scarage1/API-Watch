@@ -7,12 +7,12 @@ Provides a unified async interface for file storage with two backends:
 
 Selected via ``settings.storage_backend``.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class StorageBackend:
     """Abstract storage interface."""
 
-    async def read(self, path: str) -> Optional[str]:
+    async def read(self, path: str) -> str | None:
         raise NotImplementedError
 
     async def write(self, path: str, content: str) -> None:
@@ -54,7 +54,7 @@ class FileSystemStorage(StorageBackend):
             raise ValueError(f"Path traversal attempt: {path}")
         return full
 
-    async def read(self, path: str) -> Optional[str]:
+    async def read(self, path: str) -> str | None:
         fp = self._resolve(path)
         if not fp.exists():
             return None
@@ -104,7 +104,7 @@ class AzureBlobStorage(StorageBackend):
         except Exception:
             pass  # already exists
 
-    async def read(self, path: str) -> Optional[str]:
+    async def read(self, path: str) -> str | None:
         try:
             blob = self._container_client.get_blob_client(path)
             data = await blob.download_blob()
@@ -145,7 +145,7 @@ class AzureBlobStorage(StorageBackend):
 
 # ── Factory ──────────────────────────────────────────────────────────────────
 
-_storage: Optional[StorageBackend] = None
+_storage: StorageBackend | None = None
 
 
 def get_storage() -> StorageBackend:

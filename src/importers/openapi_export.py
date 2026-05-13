@@ -4,14 +4,15 @@ OpenAPI 3.0 exporter.
 Converts an API-Watch collection (with saved requests) into an
 OpenAPI 3.0.3 specification document.
 """
-from typing import Optional, List, Dict, Any
+
+from typing import Any
 from urllib.parse import urlparse
 
 
 def export_openapi(
     collection_name: str,
-    description: Optional[str],
-    requests: List[dict],
+    description: str | None,
+    requests: list[dict],
     version: str = "1.0.0",
 ) -> dict:
     """Convert API-Watch collection requests into an OpenAPI 3.0.3 spec.
@@ -26,8 +27,8 @@ def export_openapi(
         OpenAPI 3.0.3 specification dict
     """
     # Group requests by path
-    paths: Dict[str, Dict[str, Any]] = {}
-    servers: Dict[str, bool] = {}
+    paths: dict[str, dict[str, Any]] = {}
+    servers: dict[str, bool] = {}
 
     for req in sorted(requests, key=lambda r: r.get("sort_order", 0)):
         parsed = urlparse(req.get("url", ""))
@@ -45,7 +46,9 @@ def export_openapi(
         paths[path][method] = operation
 
     # Build servers list (deduplicated)
-    server_list = [{"url": url} for url in servers.keys()] if servers else [{"url": "http://localhost"}]
+    server_list = (
+        [{"url": url} for url in servers.keys()] if servers else [{"url": "http://localhost"}]
+    )
 
     spec = {
         "openapi": "3.0.3",
@@ -63,7 +66,7 @@ def export_openapi(
 
 def _build_operation(req: dict) -> dict:
     """Build an OpenAPI operation object from an API-Watch request."""
-    operation: Dict[str, Any] = {
+    operation: dict[str, Any] = {
         "summary": req.get("name", ""),
         "operationId": _to_operation_id(req.get("name", ""), req.get("method", "GET")),
         "responses": {
@@ -109,7 +112,7 @@ def _build_operation(req: dict) -> dict:
     body_type = req.get("body_type", "none")
     if body and body_type != "none":
         content_type = _body_type_to_media(body_type)
-        request_body: Dict[str, Any] = {
+        request_body: dict[str, Any] = {
             "required": True,
             "content": {
                 content_type: {
@@ -121,6 +124,7 @@ def _build_operation(req: dict) -> dict:
         if body_type == "json":
             try:
                 import json
+
                 request_body["content"][content_type]["example"] = json.loads(body)
             except Exception:
                 request_body["content"][content_type]["example"] = body
@@ -144,8 +148,9 @@ def _build_operation(req: dict) -> dict:
 def _to_operation_id(name: str, method: str) -> str:
     """Generate a camelCase operation ID from request name and method."""
     import re
+
     # Remove special chars, split to words
-    words = re.split(r'[^a-zA-Z0-9]+', name.strip())
+    words = re.split(r"[^a-zA-Z0-9]+", name.strip())
     words = [w for w in words if w]
     if not words:
         return method.lower()

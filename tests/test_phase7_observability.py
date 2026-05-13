@@ -31,67 +31,76 @@ Covers:
   - Model creation with all fields
   - AuditCategory enum values
 """
-import pytest
+
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+
+from src.governance import (
+    BUILTIN_RULES,
+    GovernanceChecker,
+    GovernanceReport,
+    RuleViolation,
+)
+from src.models import AuditCategory, AuditLog
+from src.secret_scanner import (
+    _PATTERNS,
+    SecretFinding,
+    _mask_match,
+    get_patterns_summary,
+    scan_dict,
+    scan_environment,
+    scan_request,
+    scan_text,
+)
 
 # ── Import application modules ────────────────────────────────────────────────
-
 from src.telemetry import (
-    Span,
     MetricsCollector,
+    Span,
     TraceStore,
     get_metrics,
     get_traces,
     reset_telemetry,
 )
-from src.secret_scanner import (
-    scan_text,
-    scan_dict,
-    scan_request,
-    scan_environment,
-    get_patterns_summary,
-    _mask_match,
-    _PATTERNS,
-    SecretFinding,
-)
-from src.governance import (
-    GovernanceChecker,
-    GovernanceRule,
-    GovernanceReport,
-    RuleViolation,
-    BUILTIN_RULES,
-)
-from src.models import AuditLog, AuditCategory
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Span
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestSpan:
     """Unit tests for the Span dataclass."""
 
     def test_span_duration_ms(self):
         s = Span(
-            trace_id="t1", span_id="s1", name="GET /api/test",
-            start_time=1000.0, end_time=1000.123, status_code=200,
+            trace_id="t1",
+            span_id="s1",
+            name="GET /api/test",
+            start_time=1000.0,
+            end_time=1000.123,
+            status_code=200,
         )
         assert abs(s.duration_ms - 123.0) < 0.5
 
     def test_span_duration_ms_none_end(self):
         s = Span(
-            trace_id="t1", span_id="s1", name="GET /api/test",
-            start_time=1000.0, end_time=None, status_code=200,
+            trace_id="t1",
+            span_id="s1",
+            name="GET /api/test",
+            start_time=1000.0,
+            end_time=None,
+            status_code=200,
         )
         assert s.duration_ms == 0.0
 
     def test_span_to_dict(self):
         s = Span(
-            trace_id="t1", span_id="s1", name="GET /api",
-            start_time=1.0, end_time=2.0, status_code=200,
+            trace_id="t1",
+            span_id="s1",
+            name="GET /api",
+            start_time=1.0,
+            end_time=2.0,
+            status_code=200,
             attributes={"key": "value"},
         )
         d = s.to_dict()
@@ -103,8 +112,12 @@ class TestSpan:
 
     def test_span_default_attributes(self):
         s = Span(
-            trace_id="t1", span_id="s1", name="test",
-            start_time=0.0, end_time=0.0, status_code=200,
+            trace_id="t1",
+            span_id="s1",
+            name="test",
+            start_time=0.0,
+            end_time=0.0,
+            status_code=200,
         )
         assert s.attributes == {}
 
@@ -112,6 +125,7 @@ class TestSpan:
 # ══════════════════════════════════════════════════════════════════════════════
 # MetricsCollector
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestMetricsCollector:
     """Unit tests for MetricsCollector."""
@@ -199,14 +213,24 @@ class TestMetricsCollector:
 # TraceStore
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestTraceStore:
     """Unit tests for TraceStore ring buffer."""
 
-    def _make_span(self, name: str = "GET /test", status: int = 200, duration: float = 50.0, path: str = "/test") -> Span:
+    def _make_span(
+        self,
+        name: str = "GET /test",
+        status: int = 200,
+        duration: float = 50.0,
+        path: str = "/test",
+    ) -> Span:
         t = time.time()
         return Span(
-            trace_id=str(uuid.uuid4()), span_id=str(uuid.uuid4()),
-            name=name, start_time=t, end_time=t + duration / 1000.0,
+            trace_id=str(uuid.uuid4()),
+            span_id=str(uuid.uuid4()),
+            name=name,
+            start_time=t,
+            end_time=t + duration / 1000.0,
             status_code=status,
             attributes={"path": path, "method": name.split()[0] if " " in name else "GET"},
         )
@@ -285,6 +309,7 @@ class TestTraceStore:
 # Module singletons
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestTelemetrySingletons:
     """Ensure module-level singletons work correctly."""
 
@@ -301,7 +326,7 @@ class TestTelemetrySingletons:
     def test_reset_telemetry_clears_data(self):
         m = get_metrics()
         m.record_request("GET", "/x", 200, 10.0)
-        t = get_traces()
+        get_traces()
         reset_telemetry()
         # After reset, singletons still work but data is cleared
         new_m = get_metrics()
@@ -311,6 +336,7 @@ class TestTelemetrySingletons:
 # ══════════════════════════════════════════════════════════════════════════════
 # Secret Scanner — Pattern Detection
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestSecretPatterns:
     """Test that each pattern correctly detects its target."""
@@ -428,6 +454,7 @@ class TestSecretPatterns:
 # Secret Scanner — Scan Functions
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestSecretScanFunctions:
     """Test scan_text, scan_dict, scan_request, scan_environment."""
 
@@ -440,12 +467,8 @@ class TestSecretScanFunctions:
 
     def test_scan_dict_nested(self):
         data = {
-            "headers": {
-                "X-Token": "ghp_abcdefghijklmnopqrstuvwxyz1234567890AB"
-            },
-            "connection": {
-                "url": "postgres://admin:secret@db.host:5432/mydb"
-            },
+            "headers": {"X-Token": "ghp_abcdefghijklmnopqrstuvwxyz1234567890AB"},
+            "connection": {"url": "postgres://admin:secret@db.host:5432/mydb"},
         }
         findings = scan_dict(data, "request")
         assert len(findings) >= 1
@@ -516,6 +539,7 @@ class TestSecretScanFunctions:
 # Secret Scanner — Masking
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestSecretMasking:
     """Test _mask_match helper."""
 
@@ -534,9 +558,12 @@ class TestSecretMasking:
 
     def test_finding_to_dict(self):
         f = SecretFinding(
-            rule_id="test", rule_name="Test Rule",
-            severity="high", description="A test",
-            location="headers", match_preview="abc***",
+            rule_id="test",
+            rule_name="Test Rule",
+            severity="high",
+            description="A test",
+            location="headers",
+            match_preview="abc***",
             line_number=1,
         )
         d = f.to_dict()
@@ -548,6 +575,7 @@ class TestSecretMasking:
 # ══════════════════════════════════════════════════════════════════════════════
 # Secret Scanner — Patterns Summary
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestPatternsSummary:
     """Test get_patterns_summary for UI."""
@@ -568,6 +596,7 @@ class TestPatternsSummary:
 # ══════════════════════════════════════════════════════════════════════════════
 # Governance — Rule Checking
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestGovernanceCheckRequest:
     """Test GovernanceChecker.check_request against built-in rules."""
@@ -681,6 +710,7 @@ class TestGovernanceCheckRequest:
 # Governance — Collection Checking
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestGovernanceCheckCollection:
     """Test GovernanceChecker.check_collection."""
 
@@ -713,6 +743,7 @@ class TestGovernanceCheckCollection:
 # Governance — Environment Checking
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestGovernanceCheckEnvironment:
     """Test GovernanceChecker.check_environment."""
 
@@ -730,11 +761,13 @@ class TestGovernanceCheckEnvironment:
         assert len(violations) == 2
 
     def test_mixed_keys(self):
-        report = self.checker.check_environment({
-            "API_URL": "x",
-            "apiKey": "y",
-            "BASE_URL": "z",
-        })
+        report = self.checker.check_environment(
+            {
+                "API_URL": "x",
+                "apiKey": "y",
+                "BASE_URL": "z",
+            }
+        )
         violations = [v for v in report.violations if v.rule_id == "naming_env_uppercase"]
         assert len(violations) == 1  # only apiKey
 
@@ -743,6 +776,7 @@ class TestGovernanceCheckEnvironment:
 # Governance — Rule Management
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class TestGovernanceRuleManagement:
     """Test enable/disable rules and rule listing."""
 
@@ -750,7 +784,9 @@ class TestGovernanceRuleManagement:
         checker = GovernanceChecker()
         assert checker.disable_rule("security_https_required")
         report = checker.check_request(
-            name="Test", method="GET", url="http://insecure.com/api",
+            name="Test",
+            method="GET",
+            url="http://insecure.com/api",
         )
         violations = [v for v in report.violations if v.rule_id == "security_https_required"]
         assert len(violations) == 0
@@ -760,7 +796,9 @@ class TestGovernanceRuleManagement:
         checker.disable_rule("security_https_required")
         checker.enable_rule("security_https_required")
         report = checker.check_request(
-            name="Test", method="GET", url="http://insecure.com/api",
+            name="Test",
+            method="GET",
+            url="http://insecure.com/api",
         )
         violations = [v for v in report.violations if v.rule_id == "security_https_required"]
         assert len(violations) == 1
@@ -784,6 +822,7 @@ class TestGovernanceRuleManagement:
 # ══════════════════════════════════════════════════════════════════════════════
 # Governance — Report & Score
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestGovernanceReport:
     """Test GovernanceReport score calculation."""
@@ -819,8 +858,12 @@ class TestGovernanceReport:
 
     def test_violation_to_dict(self):
         v = RuleViolation(
-            rule_id="test_rule", rule_name="Test", severity="error",
-            category="security", message="fail", resource_type="request",
+            rule_id="test_rule",
+            rule_name="Test",
+            severity="error",
+            category="security",
+            message="fail",
+            resource_type="request",
             resource_name="My Request",
         )
         d = v.to_dict()
@@ -832,6 +875,7 @@ class TestGovernanceReport:
 # ══════════════════════════════════════════════════════════════════════════════
 # AuditLog Model
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestAuditLogModel:
     """Test AuditLog model and AuditCategory enum."""
@@ -851,9 +895,19 @@ class TestAuditLogModel:
 
     def test_audit_log_has_required_columns(self):
         columns = {c.name for c in AuditLog.__table__.columns}
-        required = {"id", "category", "action", "resource_type", "resource_id",
-                     "user_id", "ip_address", "user_agent", "details",
-                     "severity", "created_at"}
+        required = {
+            "id",
+            "category",
+            "action",
+            "resource_type",
+            "resource_id",
+            "user_id",
+            "ip_address",
+            "user_agent",
+            "details",
+            "severity",
+            "created_at",
+        }
         assert required.issubset(columns)
 
     def test_audit_log_indexes(self):
@@ -866,6 +920,7 @@ class TestAuditLogModel:
 # ══════════════════════════════════════════════════════════════════════════════
 # Built-in Rules Enumeration
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class TestBuiltinRules:
     """Verify all 10 built-in governance rules exist."""

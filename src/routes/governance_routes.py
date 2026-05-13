@@ -2,14 +2,16 @@
 API governance routes — rule management, request/collection scanning,
 secret scanning, and governance reports.
 """
-from typing import Optional, Dict, Any, List
+
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ..governance import GovernanceChecker
 from ..jwt_auth import get_current_user
 from ..models import User
-from ..governance import GovernanceChecker, BUILTIN_RULES
-from ..secret_scanner import scan_request, scan_environment, get_patterns_summary
+from ..secret_scanner import get_patterns_summary, scan_environment, scan_request
 
 router = APIRouter(prefix="/governance", tags=["Governance"])
 
@@ -19,23 +21,24 @@ _checker = GovernanceChecker()
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class ScanRequestPayload(BaseModel):
     name: str = ""
     method: str = "GET"
     url: str = ""
-    headers: Optional[Dict[str, str]] = None
-    body: Optional[Any] = None
-    auth_config: Optional[Dict[str, str]] = None
+    headers: dict[str, str] | None = None
+    body: Any | None = None
+    auth_config: dict[str, str] | None = None
 
 
 class ScanCollectionPayload(BaseModel):
     name: str = ""
-    requests: Optional[List[Dict[str, Any]]] = None
+    requests: list[dict[str, Any]] | None = None
 
 
 class ScanEnvironmentPayload(BaseModel):
     name: str = "environment"
-    variables: Dict[str, str] = {}
+    variables: dict[str, str] = {}
 
 
 class RuleTogglePayload(BaseModel):
@@ -43,6 +46,7 @@ class RuleTogglePayload(BaseModel):
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.get("/rules")
 async def list_rules(user: User = Depends(get_current_user)):

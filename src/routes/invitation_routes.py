@@ -1,20 +1,26 @@
 """
 Invitation routes — invite users to workspaces, accept/decline.
 """
+
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
+from ..jwt_auth import _EMAIL_PATTERN, get_current_user
 from ..models import (
-    User, Workspace, WorkspaceMember, WorkspaceRole,
-    Invitation, InvitationStatus, _utcnow,
+    Invitation,
+    InvitationStatus,
+    User,
+    Workspace,
+    WorkspaceMember,
+    WorkspaceRole,
+    _utcnow,
 )
-from ..jwt_auth import get_current_user, _EMAIL_PATTERN
 from ..rbac import require_workspace_access
 
 router = APIRouter(prefix="/invitations", tags=["Invitations"])
@@ -23,6 +29,7 @@ _INVITE_EXPIRY_DAYS = 7
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class InviteCreate(BaseModel):
     email: str
@@ -51,6 +58,7 @@ class InviteAction(BaseModel):
 
 # ── Send Invitation ───────────────────────────────────────────────────────────
 
+
 @router.post("", status_code=201)
 async def send_invitation(
     body: InviteCreate,
@@ -70,9 +78,7 @@ async def send_invitation(
         raise HTTPException(status_code=403, detail="Workspace admin required to invite")
 
     # Check if already a member
-    result = await db.execute(
-        select(User).where(User.email == body.email)
-    )
+    result = await db.execute(select(User).where(User.email == body.email))
     target_user = result.scalar_one_or_none()
     if target_user:
         existing_member = await db.execute(
@@ -121,6 +127,7 @@ async def send_invitation(
 
 # ── List Invitations ─────────────────────────────────────────────────────────
 
+
 @router.get("/pending")
 async def list_my_invitations(
     user: User = Depends(get_current_user),
@@ -139,24 +146,24 @@ async def list_my_invitations(
     for inv in invites:
         # Check if expired — compare as naive UTC to handle SQLite
         expires = inv.expires_at.replace(tzinfo=None) if inv.expires_at.tzinfo else inv.expires_at
-        now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+        now_naive = datetime.now(UTC).replace(tzinfo=None)
         if expires < now_naive:
             inv.status = InvitationStatus.EXPIRED
             continue
         # Get workspace name
-        ws_result = await db.execute(
-            select(Workspace).where(Workspace.id == inv.workspace_id)
-        )
+        ws_result = await db.execute(select(Workspace).where(Workspace.id == inv.workspace_id))
         ws = ws_result.scalar_one_or_none()
-        out.append({
-            "id": inv.id,
-            "workspace_id": inv.workspace_id,
-            "workspace_name": ws.name if ws else "Unknown",
-            "role": inv.role.value,
-            "token": inv.token,
-            "created_at": inv.created_at.isoformat(),
-            "expires_at": inv.expires_at.isoformat(),
-        })
+        out.append(
+            {
+                "id": inv.id,
+                "workspace_id": inv.workspace_id,
+                "workspace_name": ws.name if ws else "Unknown",
+                "role": inv.role.value,
+                "token": inv.token,
+                "created_at": inv.created_at.isoformat(),
+                "expires_at": inv.expires_at.isoformat(),
+            }
+        )
 
     await db.commit()  # persist any expired status changes
     return out
@@ -170,9 +177,11 @@ async def list_workspace_invitations(
 ):
     """List all invitations for a workspace (admin only)."""
     result = await db.execute(
-        select(Invitation).where(
+        select(Invitation)
+        .where(
             Invitation.workspace_id == workspace_id,
-        ).order_by(Invitation.created_at.desc())
+        )
+        .order_by(Invitation.created_at.desc())
     )
     invites = result.scalars().all()
 
@@ -191,6 +200,7 @@ async def list_workspace_invitations(
 
 # ── Accept / Decline ─────────────────────────────────────────────────────────
 
+
 @router.post("/{token}/respond")
 async def respond_to_invitation(
     token: str,
@@ -199,9 +209,7 @@ async def respond_to_invitation(
     db: AsyncSession = Depends(get_db),
 ):
     """Accept or decline an invitation."""
-    result = await db.execute(
-        select(Invitation).where(Invitation.token == token)
-    )
+    result = await db.execute(select(Invitation).where(Invitation.token == token))
     invitation = result.scalar_one_or_none()
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitation not found")
@@ -212,8 +220,12 @@ async def respond_to_invitation(
     if invitation.status != InvitationStatus.PENDING:
         raise HTTPException(status_code=400, detail=f"Invitation already {invitation.status.value}")
 
-    expires = invitation.expires_at.replace(tzinfo=None) if invitation.expires_at.tzinfo else invitation.expires_at
-    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+    expires = (
+        invitation.expires_at.replace(tzinfo=None)
+        if invitation.expires_at.tzinfo
+        else invitation.expires_at
+    )
+    now_naive = datetime.now(UTC).replace(tzinfo=None)
     if expires < now_naive:
         invitation.status = InvitationStatus.EXPIRED
         await db.commit()
@@ -258,9 +270,7 @@ async def revoke_invitation(
     db: AsyncSession = Depends(get_db),
 ):
     """Revoke a pending invitation (workspace admin or inviter)."""
-    result = await db.execute(
-        select(Invitation).where(Invitation.id == invitation_id)
-    )
+    result = await db.execute(select(Invitation).where(Invitation.id == invitation_id))
     invitation = result.scalar_one_or_none()
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitation not found")

@@ -2,11 +2,10 @@
 Cookie jar management — domain-scoped cookie storage that auto-captures
 Set-Cookie headers and forwards matching cookies on subsequent requests.
 """
-import time
+
 import logging
-from typing import Optional, Dict, List
+import time
 from dataclasses import dataclass, field
-from http.cookiejar import CookieJar
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -15,14 +14,15 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Cookie:
     """A single HTTP cookie."""
+
     name: str
     value: str
     domain: str
     path: str = "/"
-    expires: Optional[float] = None
+    expires: float | None = None
     secure: bool = False
     http_only: bool = False
-    same_site: Optional[str] = None
+    same_site: str | None = None
     created_at: float = field(default_factory=time.time)
 
     @property
@@ -73,11 +73,11 @@ class CookieStore:
     """In-memory cookie jar with domain scoping and auto-expiry."""
 
     def __init__(self):
-        self._cookies: List[Cookie] = []
+        self._cookies: list[Cookie] = []
 
     # ── Public API ────────────────────────────────────────────────────────
 
-    def capture_from_headers(self, url: str, headers: Dict[str, str]) -> int:
+    def capture_from_headers(self, url: str, headers: dict[str, str]) -> int:
         """Parse Set-Cookie headers from a response and store them.
 
         Returns the number of cookies captured.
@@ -87,7 +87,7 @@ class CookieStore:
         captured = 0
 
         # Handle both single and multiple Set-Cookie headers
-        set_cookies: List[str] = []
+        set_cookies: list[str] = []
         for key, val in headers.items():
             if key.lower() == "set-cookie":
                 set_cookies.append(val)
@@ -100,16 +100,16 @@ class CookieStore:
 
         return captured
 
-    def get_cookies_for_url(self, url: str) -> Dict[str, str]:
+    def get_cookies_for_url(self, url: str) -> dict[str, str]:
         """Return a dict of name→value for cookies matching the URL."""
         self._purge_expired()
-        result: Dict[str, str] = {}
+        result: dict[str, str] = {}
         for c in self._cookies:
             if c.matches_url(url):
                 result[c.name] = c.value
         return result
 
-    def get_cookie_header(self, url: str) -> Optional[str]:
+    def get_cookie_header(self, url: str) -> str | None:
         """Build a Cookie header string for the given URL, or None."""
         cookies = self.get_cookies_for_url(url)
         if not cookies:
@@ -122,26 +122,27 @@ class CookieStore:
         value: str,
         domain: str,
         path: str = "/",
-        expires: Optional[float] = None,
+        expires: float | None = None,
         secure: bool = False,
     ) -> None:
         """Manually set a cookie."""
         cookie = Cookie(
-            name=name, value=value, domain=domain,
-            path=path, expires=expires, secure=secure,
+            name=name,
+            value=value,
+            domain=domain,
+            path=path,
+            expires=expires,
+            secure=secure,
         )
         self._upsert(cookie)
 
     def delete_cookie(self, name: str, domain: str) -> bool:
         """Delete a cookie by name and domain."""
         before = len(self._cookies)
-        self._cookies = [
-            c for c in self._cookies
-            if not (c.name == name and c.domain == domain)
-        ]
+        self._cookies = [c for c in self._cookies if not (c.name == name and c.domain == domain)]
         return len(self._cookies) < before
 
-    def clear(self, domain: Optional[str] = None) -> int:
+    def clear(self, domain: str | None = None) -> int:
         """Clear all cookies, or only those for a specific domain."""
         before = len(self._cookies)
         if domain:
@@ -150,7 +151,7 @@ class CookieStore:
             self._cookies = []
         return before - len(self._cookies)
 
-    def list_all(self) -> List[dict]:
+    def list_all(self) -> list[dict]:
         """Return all cookies as dicts."""
         self._purge_expired()
         return [c.to_dict() for c in self._cookies]
@@ -165,9 +166,11 @@ class CookieStore:
     def _upsert(self, cookie: Cookie) -> None:
         """Insert or update a cookie (match by name + domain + path)."""
         for i, existing in enumerate(self._cookies):
-            if (existing.name == cookie.name
-                    and existing.domain == cookie.domain
-                    and existing.path == cookie.path):
+            if (
+                existing.name == cookie.name
+                and existing.domain == cookie.domain
+                and existing.path == cookie.path
+            ):
                 self._cookies[i] = cookie
                 return
         self._cookies.append(cookie)
@@ -177,7 +180,7 @@ class CookieStore:
         self._cookies = [c for c in self._cookies if not c.is_expired]
 
     @staticmethod
-    def _parse_set_cookie(raw: str, default_domain: str) -> Optional[Cookie]:
+    def _parse_set_cookie(raw: str, default_domain: str) -> Cookie | None:
         """Parse a Set-Cookie header value into a Cookie object."""
         parts = [p.strip() for p in raw.split(";")]
         if not parts:
@@ -190,7 +193,7 @@ class CookieStore:
 
         eq_idx = name_val.index("=")
         name = name_val[:eq_idx].strip()
-        value = name_val[eq_idx + 1:].strip()
+        value = name_val[eq_idx + 1 :].strip()
 
         if not name:
             return None
@@ -231,7 +234,7 @@ class CookieStore:
 
 # ── Module-level singleton (per-session) ──────────────────────────────────────
 
-_store: Optional[CookieStore] = None
+_store: CookieStore | None = None
 
 
 def get_cookie_store() -> CookieStore:

@@ -11,11 +11,11 @@ __author__ = "Kumar"
 __description__ = "APIWatch - Intelligent API debugging and monitoring toolkit"
 
 # Export main classes for easier imports
-from .runner import APIRunner, RequestConfig, RequestResult
 from .auth import AuthHandler
-from .retry import RetryHandler, RetryConfig
-from .diagnose import DiagnosisEngine, Diagnosis
+from .diagnose import Diagnosis, DiagnosisEngine
 from .report import ReportGenerator
+from .retry import RetryConfig, RetryHandler
+from .runner import APIRunner, RequestConfig, RequestResult
 
 __all__ = [
     "APIRunner",

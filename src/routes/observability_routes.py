@@ -2,20 +2,23 @@
 Observability routes — metrics, traces, and usage analytics.
 Exposes telemetry data captured by the request middleware.
 """
-from typing import Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import select, func, desc, cast, Date
+
+from datetime import UTC
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import User, RequestHistory
 from ..jwt_auth import get_current_user
+from ..models import RequestHistory, User
 from ..telemetry import get_metrics, get_traces
 
 router = APIRouter(prefix="/observability", tags=["Observability"])
 
 
 # ── Telemetry endpoints ──────────────────────────────────────────────────────
+
 
 @router.get("/metrics")
 async def metrics_summary(user: User = Depends(get_current_user)):
@@ -25,9 +28,9 @@ async def metrics_summary(user: User = Depends(get_current_user)):
 
 @router.get("/traces")
 async def list_traces(
-    path: Optional[str] = Query(None, description="Filter by URL path prefix"),
-    min_duration_ms: Optional[float] = Query(None, description="Min duration in ms"),
-    status_code: Optional[int] = Query(None, description="Filter by HTTP status code"),
+    path: str | None = Query(None, description="Filter by URL path prefix"),
+    min_duration_ms: float | None = Query(None, description="Min duration in ms"),
+    status_code: int | None = Query(None, description="Filter by HTTP status code"),
     limit: int = Query(50, ge=1, le=200),
     user: User = Depends(get_current_user),
 ):
@@ -43,6 +46,7 @@ async def list_traces(
 
 # ── Usage analytics (DB-backed) ──────────────────────────────────────────────
 
+
 @router.get("/usage")
 async def usage_analytics(
     days: int = Query(7, ge=1, le=90, description="Number of days to aggregate"),
@@ -54,14 +58,13 @@ async def usage_analytics(
     Returns: total requests, success/failure counts, requests per day,
     top methods, average response time.
     """
-    from datetime import datetime, timezone, timedelta
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    from datetime import datetime, timedelta
+
+    cutoff = datetime.now(UTC) - timedelta(days=days)
 
     # Total requests in period
     total_q = (
-        select(func.count())
-        .select_from(RequestHistory)
-        .where(RequestHistory.executed_at >= cutoff)
+        select(func.count()).select_from(RequestHistory).where(RequestHistory.executed_at >= cutoff)
     )
     total = (await db.execute(total_q)).scalar() or 0
 
@@ -84,9 +87,8 @@ async def usage_analytics(
     by_method = {row[0]: row[1] for row in method_result.all()}
 
     # Average response time
-    avg_q = (
-        select(func.avg(RequestHistory.response_time))
-        .where(RequestHistory.executed_at >= cutoff)
+    avg_q = select(func.avg(RequestHistory.response_time)).where(
+        RequestHistory.executed_at >= cutoff
     )
     avg_time = (await db.execute(avg_q)).scalar()
     avg_time_ms = round(avg_time * 1000, 1) if avg_time else 0
@@ -102,10 +104,7 @@ async def usage_analytics(
         .order_by("day")
     )
     daily_result = await db.execute(daily_q)
-    per_day = [
-        {"date": str(row[0]), "count": row[1]}
-        for row in daily_result.all()
-    ]
+    per_day = [{"date": str(row[0]), "count": row[1]} for row in daily_result.all()]
 
     return {
         "period_days": days,

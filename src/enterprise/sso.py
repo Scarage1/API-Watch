@@ -16,28 +16,27 @@ Security:
   - Relay state validation for SAML
   - Domain-restricted SSO (only matching email domains)
 """
+
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
 import secrets
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode, urlparse
+from enum import StrEnum
+from typing import Any
+from urllib.parse import urlencode
 
 logger = logging.getLogger("apiwatch.enterprise.sso")
 
 
 # ── SSO Provider Types ────────────────────────────────────────
-class SSOProvider(str, Enum):
+class SSOProvider(StrEnum):
     SAML = "saml"
     OIDC = "oidc"
 
 
-class SSOStatus(str, Enum):
+class SSOStatus(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     TESTING = "testing"
@@ -47,6 +46,7 @@ class SSOStatus(str, Enum):
 @dataclass
 class SSOConfig:
     """SSO configuration for an organization."""
+
     organization_id: str
     provider: SSOProvider
     status: SSOStatus = SSOStatus.INACTIVE
@@ -56,7 +56,7 @@ class SSOConfig:
     logo_url: str = ""
 
     # Domain restriction
-    allowed_domains: List[str] = field(default_factory=list)  # e.g., ["company.com"]
+    allowed_domains: list[str] = field(default_factory=list)  # e.g., ["company.com"]
     enforce_sso: bool = False  # If True, password login disabled for org members
 
     # SAML 2.0 settings
@@ -70,7 +70,7 @@ class SSOConfig:
     oidc_client_id: str = ""
     oidc_client_secret: str = ""  # Encrypted at rest
     oidc_issuer_url: str = ""  # e.g., "https://accounts.google.com"
-    oidc_scopes: List[str] = field(default_factory=lambda: ["openid", "email", "profile"])
+    oidc_scopes: list[str] = field(default_factory=lambda: ["openid", "email", "profile"])
     oidc_redirect_uri: str = ""
 
     # Auto-provisioning
@@ -80,7 +80,7 @@ class SSOConfig:
     created_at: str = ""
     updated_at: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize config (excluding secrets)."""
         return {
             "organization_id": self.organization_id,
@@ -111,11 +111,12 @@ class SSOConfig:
 @dataclass
 class SSOSession:
     """Temporary state for an in-flight SSO login."""
-    state: str                # Random state parameter
-    nonce: str                # OIDC nonce / SAML relay state
+
+    state: str  # Random state parameter
+    nonce: str  # OIDC nonce / SAML relay state
     organization_id: str
     provider: SSOProvider
-    redirect_url: str         # Where to redirect after login
+    redirect_url: str  # Where to redirect after login
     created_at: float = field(default_factory=time.time)
     expires_at: float = 0.0
 
@@ -131,14 +132,15 @@ class SSOSession:
 @dataclass
 class SSOUser:
     """User identity from an SSO provider."""
+
     email: str
     name: str = ""
     first_name: str = ""
     last_name: str = ""
     avatar_url: str = ""
-    provider_id: str = ""     # Subject/NameID from IdP
-    groups: List[str] = field(default_factory=list)
-    raw_attributes: Dict[str, Any] = field(default_factory=dict)
+    provider_id: str = ""  # Subject/NameID from IdP
+    groups: list[str] = field(default_factory=list)
+    raw_attributes: dict[str, Any] = field(default_factory=dict)
 
 
 # ── SSO Service ───────────────────────────────────────────────
@@ -160,8 +162,8 @@ class SSOService:
     """
 
     def __init__(self):
-        self._configs: Dict[str, SSOConfig] = {}
-        self._sessions: Dict[str, SSOSession] = {}
+        self._configs: dict[str, SSOConfig] = {}
+        self._sessions: dict[str, SSOSession] = {}
 
     # ── Config Management ─────────────────────────────────────
 
@@ -170,10 +172,12 @@ class SSOService:
         self._configs[config.organization_id] = config
         logger.info(
             "SSO config registered for org %s: provider=%s, status=%s",
-            config.organization_id, config.provider.value, config.status.value
+            config.organization_id,
+            config.provider.value,
+            config.status.value,
         )
 
-    def get_config(self, organization_id: str) -> Optional[SSOConfig]:
+    def get_config(self, organization_id: str) -> SSOConfig | None:
         """Get SSO config for an organization."""
         return self._configs.get(organization_id)
 
@@ -195,7 +199,7 @@ class SSOService:
         self,
         organization_id: str,
         redirect_url: str = "/",
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Start SSO login flow.
         Returns dict with 'login_url' and 'state' for the IdP redirect.
@@ -237,7 +241,7 @@ class SSOService:
     async def process_callback(
         self,
         state: str,
-        params: Dict[str, str],
+        params: dict[str, str],
     ) -> SSOUser:
         """
         Process SSO callback from IdP.
@@ -287,7 +291,7 @@ class SSOService:
     async def _process_saml_callback(
         self,
         config: SSOConfig,
-        params: Dict[str, str],
+        params: dict[str, str],
     ) -> SSOUser:
         """
         Process SAML Response.
@@ -347,7 +351,7 @@ class SSOService:
         self,
         config: SSOConfig,
         session: SSOSession,
-        params: Dict[str, str],
+        params: dict[str, str],
     ) -> SSOUser:
         """
         Process OIDC authorization code callback.
@@ -378,7 +382,7 @@ class SSOService:
 
     def cleanup_expired_sessions(self) -> int:
         """Remove expired SSO sessions. Call periodically."""
-        now = time.time()
+        time.time()
         expired = [s for s, session in self._sessions.items() if session.is_expired]
         for s in expired:
             del self._sessions[s]
@@ -388,7 +392,7 @@ class SSOService:
 
 
 # ── Global singleton ──────────────────────────────────────────
-_sso_service: Optional[SSOService] = None
+_sso_service: SSOService | None = None
 
 
 def get_sso_service() -> SSOService:
