@@ -60,17 +60,15 @@ const methodDotColors: Record<string, string> = {
 
 type RequestPanel = 'params' | 'headers' | 'body' | 'pre-request' | 'tests';
 
-function deriveTabName(url: string, currentName: string): string {
-  if (currentName && currentName !== 'New Request' && currentName !== 'Untitled') {
-    return currentName;
-  }
+function deriveTabName(url: string): string {
   if (!url) return 'Untitled';
   try {
     const u = new URL(url);
     const path = u.pathname === '/' ? u.hostname : u.pathname;
     return path.length > 25 ? path.slice(0, 25) : path;
   } catch {
-    return url.length > 25 ? url.slice(0, 25) : url;
+    // URL is still being typed — show truncated raw input
+    return url.length > 25 ? url.slice(0, 25) + '…' : url;
   }
 }
 
@@ -374,7 +372,7 @@ export default function SingleRequest() {
           <input
             type="text"
             value={tab.url}
-            onChange={(e) => update({ url: e.target.value, name: deriveTabName(e.target.value, tab.name) })}
+            onChange={(e) => update({ url: e.target.value, name: deriveTabName(e.target.value) })}
             onKeyDown={(e) => { if (e.key === 'Enter') executeRequest(); }}
             placeholder="https://api.example.com/endpoint"
             className="input flex-1 font-mono text-sm"
