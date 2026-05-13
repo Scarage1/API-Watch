@@ -224,6 +224,7 @@ export default function SSEClient() {
             )}
           >
             {paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+            {/* eslint-disable-next-line react-hooks/refs */}
             {paused ? `Paused (${bufferRef.current.length} buffered)` : 'Pause'}
           </button>
           <button

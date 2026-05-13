@@ -24,7 +24,8 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
-    checkHealth();
+    // Avoid synchronous state updates in effect
+    setTimeout(() => { void checkHealth(); }, 0);
     const interval = setInterval(checkHealth, 30_000);
     return () => clearInterval(interval);
   }, [checkHealth]);

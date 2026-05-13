@@ -34,7 +34,7 @@ function AnimatedValue({ value, suffix = '' }: { value: number | string; suffix?
   const numVal = typeof value === 'string' ? parseFloat(value) || 0 : value;
 
   useEffect(() => {
-    if (numVal === 0) { setDisplay(0); return; }
+    if (numVal === 0) { setTimeout(() => setDisplay(0), 0); return; }
     const duration = 600;
     const steps = 30;
     const increment = numVal / steps;

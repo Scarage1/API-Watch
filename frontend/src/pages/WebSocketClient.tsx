@@ -61,7 +61,7 @@ export default function WebSocketClient() {
       wsRef.current?.close();
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const addSystemMessage = useCallback((data: string) => {
@@ -132,6 +132,7 @@ export default function WebSocketClient() {
 
         if (autoReconnect && event.code !== 1000) {
           addSystemMessage('Reconnecting in 3 seconds…');
+          // eslint-disable-next-line
           reconnectTimer.current = setTimeout(() => connect(), 3000);
         }
       };

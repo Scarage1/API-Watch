@@ -52,7 +52,6 @@ export function useApi<T>(
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, ...deps]);
 
   useEffect(() => {

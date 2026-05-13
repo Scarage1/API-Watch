@@ -28,7 +28,7 @@ function usePerfStats(enabled: boolean): PerfStats {
   });
 
   const frameCountRef = useRef(0);
-  const lastTimeRef = useRef(performance.now());
+  const lastTimeRef = useRef(0);
   const rafRef = useRef<number>(0);
 
   useEffect(() => {

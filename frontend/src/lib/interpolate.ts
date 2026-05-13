@@ -12,7 +12,7 @@
  */
 
 /** Regex matching {{VAR_NAME}} and {{$dynamicVar}} */
-const VAR_PATTERN = /\{\{(\$?[A-Za-z0-9_.\-]+)\}\}/g;
+const VAR_PATTERN = /\{\{(\$?[A-Za-z0-9_.-]+)\}\}/g;
 
 // ── Dynamic Variables ────────────────────────────────────────────────────────
 

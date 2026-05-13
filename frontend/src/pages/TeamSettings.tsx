@@ -67,7 +67,6 @@ export default function TeamSettings() {
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId]);
 
   const handleInvite = async () => {
