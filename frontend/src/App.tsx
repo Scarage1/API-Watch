@@ -50,7 +50,7 @@ function App() {
         useAppStore.getState().toggleDarkMode();
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Migrate localStorage data to IndexedDB on first load
