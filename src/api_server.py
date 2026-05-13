@@ -330,6 +330,15 @@ async def execute_single_request(
             timeout=request_input.timeout,
         )
 
+        # Lazy-init runner if lifespan was bypassed (e.g., during tests)
+        global _global_runner
+        if _global_runner is None:
+            _global_runner = APIRunner(
+                auth_handler=None,
+                retry_config=RetryConfig(max_retries=3, initial_delay=1.0),
+                logger=logger,
+            )
+
         result = await _global_runner.execute_async(config)
 
         # Record execution metrics

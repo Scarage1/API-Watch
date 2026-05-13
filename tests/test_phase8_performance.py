@@ -88,9 +88,9 @@ class TestConnectionPooling:
         transport = client._transport
         assert isinstance(transport, httpx.AsyncHTTPTransport)
         pool = transport._pool
-        # httpcore pool stores limits
-        assert pool._max_connections == 100
-        assert pool._max_keepalive_connections == 20
+        # httpcore pool stores limits — must match src/runner.py pool configuration
+        assert pool._max_connections == 200
+        assert pool._max_keepalive_connections == 40
         asyncio.get_event_loop().run_until_complete(runner.close_async())
 
     def test_sync_close_does_not_affect_async(self):

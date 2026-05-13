@@ -288,7 +288,7 @@ async def search_audit_logs(request: AuditSearchRequest):
 @router.get("/audit/export/{organization_id}")
 async def export_audit_logs(
     organization_id: str,
-    format: str = Query("json", regex="^(json|csv)$"),
+    format: str = Query("json", pattern="^(json|csv)$"),
     start_time: float | None = None,
     end_time: float | None = None,
 ):
