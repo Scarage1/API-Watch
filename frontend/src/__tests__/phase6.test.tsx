@@ -339,25 +339,31 @@ describe('OnboardingModal', () => {
   it('does not render if already seen', () => {
     localStorage.setItem('api-watch-onboarding-seen', 'true');
     render(<OnboardingModal />);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // Card should not appear
+    expect(screen.queryByLabelText('Welcome to API-Watch')).not.toBeInTheDocument();
   });
 
   it('shows after delay for new users', async () => {
     vi.useFakeTimers();
     render(<OnboardingModal />);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(700); });
+    // Not visible immediately
+    expect(screen.queryByLabelText('Welcome to API-Watch')).not.toBeInTheDocument();
+    // Component has 800ms delay
+    act(() => { vi.advanceTimersByTime(900); });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText(/welcome to api/i)).toBeInTheDocument();
+    // Brand name is split across multiple elements ("API" + "Watch")
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Welcome to API-Watch');
     vi.useRealTimers();
   });
 
   it('advances steps on Next click', async () => {
     vi.useFakeTimers();
     render(<OnboardingModal />);
-    act(() => { vi.advanceTimersByTime(700); });
-    expect(screen.getByText('Send Requests')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Next'));
+    act(() => { vi.advanceTimersByTime(900); });
+    // First step title
+    expect(screen.getByText('Send HTTP Requests')).toBeInTheDocument();
+    // Click Next (button contains 'Next' text + icon)
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
     expect(screen.getByText('Organize Collections')).toBeInTheDocument();
     vi.useRealTimers();
   });
@@ -365,9 +371,11 @@ describe('OnboardingModal', () => {
   it('dismisses on Skip', () => {
     vi.useFakeTimers();
     render(<OnboardingModal />);
-    act(() => { vi.advanceTimersByTime(700); });
-    fireEvent.click(screen.getByText('Skip'));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(900); });
+    // "Skip all" button
+    fireEvent.click(screen.getByRole('button', { name: /skip/i }));
+    // After dismiss animation (350ms), localStorage should be set
+    act(() => { vi.advanceTimersByTime(400); });
     expect(localStorage.getItem('api-watch-onboarding-seen')).toBe('true');
     vi.useRealTimers();
   });
@@ -375,13 +383,15 @@ describe('OnboardingModal', () => {
   it('dismisses on Get Started (last step)', () => {
     vi.useFakeTimers();
     render(<OnboardingModal />);
-    act(() => { vi.advanceTimersByTime(700); });
-    // Navigate to last step
-    fireEvent.click(screen.getByText('Next')); // step 2
-    fireEvent.click(screen.getByText('Next')); // step 3
-    fireEvent.click(screen.getByText('Next')); // step 4
-    fireEvent.click(screen.getByText('Get Started'));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(900); });
+    // Navigate to last step (4 steps total)
+    fireEvent.click(screen.getByRole('button', { name: /next/i })); // step 2
+    fireEvent.click(screen.getByRole('button', { name: /next/i })); // step 3
+    fireEvent.click(screen.getByRole('button', { name: /next/i })); // step 4
+    // Last step CTA
+    fireEvent.click(screen.getByRole('button', { name: /let.s go/i }));
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(localStorage.getItem('api-watch-onboarding-seen')).toBe('true');
     vi.useRealTimers();
   });
 });
