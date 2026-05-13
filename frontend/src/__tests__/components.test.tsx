@@ -53,6 +53,6 @@ describe('Sidebar', () => {
 
   it('renders version footer', () => {
     renderWithRouter(<Sidebar />);
-    expect(screen.getByText('API-Watch v3.0 Enterprise')).toBeInTheDocument();
+    expect(screen.getByText(/v3\.1 Enterprise/i)).toBeInTheDocument();
   });
 });

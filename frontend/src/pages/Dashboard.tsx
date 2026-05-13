@@ -1,614 +1,368 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Activity,
-  CheckCircle2,
-  XCircle,
-  Timer,
-  TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
-  Zap,
-  Globe,
-  Sparkles,
-  Clock,
-  Send,
-  Braces,
-  Plug,
-  Radio,
-  ChevronRight,
+  Activity, CheckCircle2, TrendingUp,
+  Clock, Send, Braces, Plug, Radio, Globe, ChevronRight,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, BarChart, Bar, Cell,
 } from 'recharts';
 import { cn } from '../lib/utils';
 
-// ── Animated number counter ───────────────────────────────────
+// ── Counter animation ─────────────────────────────────────────────────────────
 function AnimatedValue({ value, suffix = '' }: { value: number | string; suffix?: string }) {
   const [display, setDisplay] = useState(0);
   const numVal = typeof value === 'string' ? parseFloat(value) || 0 : value;
 
   useEffect(() => {
     if (numVal === 0) { setTimeout(() => setDisplay(0), 0); return; }
-    const duration = 600;
-    const steps = 30;
-    const increment = numVal / steps;
-    let current = 0;
-    const timer = setInterval(() => {
-      current += increment;
-      if (current >= numVal) {
-        setDisplay(numVal);
-        clearInterval(timer);
-      } else {
-        setDisplay(Math.floor(current));
-      }
+    const steps = 24; const duration = 500;
+    const inc = numVal / steps; let cur = 0;
+    const t = setInterval(() => {
+      cur += inc;
+      if (cur >= numVal) { setDisplay(numVal); clearInterval(t); }
+      else setDisplay(Math.floor(cur));
     }, duration / steps);
-    return () => clearInterval(timer);
+    return () => clearInterval(t);
   }, [numVal]);
 
   return (
-    <span className="tabular-nums">
-      {typeof value === 'string' && value.includes('ms')
-        ? `${Math.round(display)}ms`
-        : display}
+    <span className="font-tabular">
+      {typeof value === 'string' && value.includes('ms') ? `${Math.round(display)}ms` : display}
       {suffix}
     </span>
   );
 }
 
-// ── Status pulse dot ──────────────────────────────────────────
-function StatusDot({ status }: { status: 'healthy' | 'warning' | 'error' }) {
-  const colors = {
-    healthy: 'bg-emerald-500',
-    warning: 'bg-amber-500',
-    error: 'bg-red-500',
-  };
+// ── Status indicator ──────────────────────────────────────────────────────────
+function SystemBadge({ status }: { status: 'healthy' | 'warning' | 'error' }) {
+  const map = {
+    healthy: { dot: 'conn-dot-ok conn-dot-pulse', label: 'All Systems Operational', color: '#16a34a' },
+    warning: { dot: 'conn-dot-warn conn-dot-pulse', label: 'Degraded Performance', color: '#d97706' },
+    error:   { dot: 'conn-dot-err', label: 'Issues Detected', color: '#dc2626' },
+  }[status];
   return (
-    <span className="relative flex h-2.5 w-2.5">
-      <span className={cn('animate-ping absolute inline-flex h-full w-full rounded-full opacity-75', colors[status])} />
-      <span className={cn('relative inline-flex rounded-full h-2.5 w-2.5', colors[status])} />
-    </span>
+    <div className="flex items-center gap-2">
+      <span className={cn('conn-dot', map.dot)} />
+      <span className="text-[11px] font-medium" style={{ color: map.color }}>{map.label}</span>
+    </div>
   );
 }
 
 export default function Dashboard() {
   const { testHistory } = useAppStore();
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
-    total: 0,
-    successful: 0,
-    failed: 0,
-    successRate: 0,
-    avgResponseTime: 0,
+    total: 0, successful: 0, failed: 0, successRate: 0, avgResponseTime: 0,
   });
 
   useEffect(() => {
     if (testHistory.length > 0) {
       const successful = testHistory.filter((t) => t.success).length;
       const failed = testHistory.length - successful;
-      const avgTime =
-        testHistory.reduce((acc, t) => acc + t.response_time, 0) /
-        testHistory.length;
-
-      setStats({
-        total: testHistory.length,
-        successful,
-        failed,
-        successRate: (successful / testHistory.length) * 100,
-        avgResponseTime: avgTime,
-      });
+      const avgTime = testHistory.reduce((acc, t) => acc + t.response_time, 0) / testHistory.length;
+      setStats({ total: testHistory.length, successful, failed, successRate: (successful / testHistory.length) * 100, avgResponseTime: avgTime });
     } else {
       setStats({ total: 0, successful: 0, failed: 0, successRate: 0, avgResponseTime: 0 });
     }
   }, [testHistory]);
 
   const recentTests = testHistory.slice(0, 8);
-
-  const systemStatus = stats.total === 0
-    ? 'healthy'
-    : stats.successRate >= 95
-      ? 'healthy'
-      : stats.successRate >= 80
-        ? 'warning'
-        : 'error';
+  const systemStatus = stats.total === 0 ? 'healthy' : stats.successRate >= 95 ? 'healthy' : stats.successRate >= 80 ? 'warning' : 'error';
 
   const statCards = [
-    {
-      title: 'Total Requests',
-      value: stats.total,
-      icon: Activity,
-      trend: `${stats.total}`,
-      trendUp: true,
-      gradient: 'from-indigo-500 to-blue-600',
-      bgGlow: 'bg-indigo-500/10',
-      accentFrom: '#6366f1',
-      accentTo: '#3b82f6',
-    },
-    {
-      title: 'Successful',
-      value: stats.successful,
-      icon: CheckCircle2,
-      trend: `${stats.successRate.toFixed(0)}%`,
-      trendUp: true,
-      gradient: 'from-emerald-500 to-teal-600',
-      bgGlow: 'bg-emerald-500/10',
-      accentFrom: '#10b981',
-      accentTo: '#0d9488',
-    },
-    {
-      title: 'Failed',
-      value: stats.failed,
-      icon: XCircle,
-      trend: stats.total > 0 ? `${((stats.failed / stats.total) * 100).toFixed(0)}%` : '0%',
-      trendUp: false,
-      gradient: 'from-rose-500 to-red-600',
-      bgGlow: 'bg-rose-500/10',
-      accentFrom: '#f43f5e',
-      accentTo: '#ef4444',
-    },
-    {
-      title: 'Avg Response',
-      value: `${(stats.avgResponseTime * 1000).toFixed(0)}ms`,
-      icon: Timer,
-      trend: 'latency',
-      trendUp: stats.avgResponseTime < 0.5,
-      gradient: 'from-amber-500 to-orange-600',
-      bgGlow: 'bg-amber-500/10',
-      accentFrom: '#f59e0b',
-      accentTo: '#ea580c',
-    },
+    { title: 'Total Requests', value: stats.total,             dotClass: 'status-dot-blue',  trend: `${stats.total} run` },
+    { title: 'Successful',     value: stats.successful,        dotClass: 'status-dot-green', trend: `${stats.successRate.toFixed(0)}% rate` },
+    { title: 'Failed',         value: stats.failed,            dotClass: 'status-dot-red',   trend: stats.total > 0 ? `${((stats.failed / stats.total) * 100).toFixed(0)}% of total` : '0%' },
+    { title: 'Avg Response',   value: `${(stats.avgResponseTime * 1000).toFixed(0)}ms`, dotClass: 'status-dot-amber', trend: 'latency' },
   ];
 
-  // ── Chart data ────────────────────────────────────────────
-  const responseTimeData = useMemo(() => {
-    return testHistory
-      .slice(0, 20)
-      .reverse()
-      .map((test, idx) => ({
-        name: `#${idx + 1}`,
-        time: Math.round(test.response_time * 1000),
-      }));
-  }, [testHistory]);
+  const responseTimeData = useMemo(() =>
+    testHistory.slice(0, 20).reverse().map((t, i) => ({ name: `#${i + 1}`, time: Math.round(t.response_time * 1000) })),
+    [testHistory]
+  );
 
   const successRateData = useMemo(() => {
     const reversed = testHistory.slice(0, 20).reverse();
-    let successCount = 0;
-    return reversed.map((test, idx) => {
-      if (test.success) successCount++;
-      const rate = Math.round((successCount / (idx + 1)) * 100);
-      return {
-        name: `#${idx + 1}`,
-        rate,
-        status: test.success ? 'pass' : 'fail',
-      };
+    let ok = 0;
+    return reversed.map((t, i) => {
+      if (t.success) ok++;
+      return { name: `#${i + 1}`, rate: Math.round((ok / (i + 1)) * 100), status: t.success ? 'pass' : 'fail' };
     });
   }, [testHistory]);
 
-  // Method distribution for the mini bar chart
   const methodDistribution = useMemo(() => {
     const counts: Record<string, number> = {};
-    testHistory.slice(0, 50).forEach((t) => {
-      const m = t.request_method || 'GET';
-      counts[m] = (counts[m] || 0) + 1;
-    });
-    const methodColors: Record<string, string> = {
-      GET: '#10b981', POST: '#3b82f6', PUT: '#f59e0b',
-      PATCH: '#8b5cf6', DELETE: '#ef4444', OPTIONS: '#6b7280',
-    };
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([method, count]) => ({
-        method,
-        count,
-        fill: methodColors[method] || '#6b7280',
-      }));
+    testHistory.slice(0, 50).forEach((t) => { const m = t.request_method || 'GET'; counts[m] = (counts[m] || 0) + 1; });
+    const colors: Record<string, string> = { GET: '#0f766e', POST: '#15803d', PUT: '#b45309', PATCH: '#7c3aed', DELETE: '#b91c1c', OPTIONS: '#4b5563' };
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([method, count]) => ({ method, count, fill: colors[method] || '#6b7280' }));
   }, [testHistory]);
 
-  const tooltipStyle = {
-    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-    border: '1px solid rgba(51, 65, 85, 0.5)',
-    borderRadius: '12px',
-    color: '#f1f5f9',
-    fontSize: '12px',
-    padding: '8px 12px',
-    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
-    backdropFilter: 'blur(8px)',
-  };
-
-  const navigate = useNavigate();
-
   const quickActions = [
-    { label: 'HTTP Request', icon: Send,    to: '/request',   gradient: 'from-indigo-500 to-brand-600',  desc: 'REST & HTTP' },
-    { label: 'WebSocket',    icon: Plug,    to: '/websocket', gradient: 'from-violet-500 to-purple-600', desc: 'Real-time' },
-    { label: 'GraphQL',      icon: Braces,  to: '/graphql',   gradient: 'from-pink-500 to-rose-600',     desc: 'Query & Mutate' },
-    { label: 'SSE Client',   icon: Radio,   to: '/sse',       gradient: 'from-teal-500 to-accent-600',   desc: 'Event streams' },
+    { label: 'HTTP Request', icon: Send,   to: '/request',   desc: 'REST & HTTP',    color: '#6366f1' },
+    { label: 'WebSocket',    icon: Plug,   to: '/websocket', desc: 'Real-time WS',   color: '#7c3aed' },
+    { label: 'GraphQL',      icon: Braces, to: '/graphql',   desc: 'Query & Mutate', color: '#ec4899' },
+    { label: 'SSE Client',   icon: Radio,  to: '/sse',       desc: 'Event streams',  color: '#0891b2' },
   ];
 
+  const tooltipStyle = {
+    backgroundColor: '#1a1a2e',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '6px',
+    color: '#e2e8f0',
+    fontSize: '12px',
+    padding: '6px 10px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+  };
+
   return (
-    <div className="space-y-6 page-enter">
+    <div className="space-y-5 page-enter">
 
-      {/* ── Hero Banner ─────────────────────────────────────── */}
-      <div
-        className="relative overflow-hidden rounded-2xl p-6 border border-brand-200/30 dark:border-brand-800/30"
-        style={{
-          background: 'linear-gradient(135deg, rgba(79,70,229,0.08) 0%, rgba(124,58,237,0.06) 50%, rgba(13,148,136,0.05) 100%)',
-        }}
-      >
-        {/* Animated mesh background */}
-        <div className="absolute inset-0 gradient-mesh opacity-60 pointer-events-none" />
-        {/* Floating glow orbs */}
-        <div className="absolute -top-8 -right-8 w-40 h-40 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-accent-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <StatusDot status={systemStatus} />
-              <span className="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-widest">
-                {systemStatus === 'healthy' ? 'All Systems Operational' : systemStatus === 'warning' ? 'Degraded' : 'Issues Detected'}
-              </span>
-            </div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-surface-900 dark:text-white">
-              Welcome to{' '}
-              <span className="gradient-text">API-Watch</span>
-            </h1>
-            <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-              Your enterprise API testing & monitoring platform
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/request')}
-              className="btn-primary text-sm gap-2"
-            >
-              <Zap className="w-4 h-4" />
-              New Request
-            </button>
-            <button
-              onClick={() => navigate('/monitors')}
-              className="btn-secondary text-sm"
-            >
-              <Sparkles className="w-4 h-4" />
-              Monitors
-            </button>
+      {/* ── Page header ────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-surface-900 dark:text-white tracking-tight">
+            Dashboard
+          </h1>
+          <div className="mt-1.5">
+            <SystemBadge status={systemStatus} />
           </div>
         </div>
-
-        {/* Quick action pills */}
-        <div className="relative mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {quickActions.map((qa) => (
-            <button
-              key={qa.to}
-              onClick={() => navigate(qa.to)}
-              className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-surface-800/70 border border-white/60 dark:border-surface-700/50 hover:border-brand-300 dark:hover:border-brand-700 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md text-left"
-            >
-              <div className={cn('p-1.5 rounded-lg bg-gradient-to-br shadow-sm flex-shrink-0', qa.gradient)}>
-                <qa.icon className="w-3 h-3 text-white" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-surface-800 dark:text-surface-200 truncate">{qa.label}</p>
-                <p className="text-[10px] text-surface-400 dark:text-surface-500 truncate">{qa.desc}</p>
-              </div>
-              <ChevronRight className="w-3 h-3 text-surface-300 dark:text-surface-600 ml-auto flex-shrink-0 group-hover:text-brand-400 group-hover:translate-x-0.5 transition-all" />
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate('/request')} className="btn-primary gap-1.5">
+            <Send className="w-3.5 h-3.5" />
+            New Request
+          </button>
+          <button onClick={() => navigate('/monitors')} className="btn-secondary gap-1.5">
+            <Activity className="w-3.5 h-3.5" />
+            Monitors
+          </button>
         </div>
       </div>
 
-      {/* ── Stats Grid ──────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((stat, i) => (
-          <div
-            key={stat.title}
-            className="group relative overflow-hidden rounded-2xl bg-white dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700/50 p-5 transition-all duration-300 hover:-translate-y-1 cursor-default"
+      {/* ── Quick actions ───────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {quickActions.map((qa) => (
+          <button
+            key={qa.to}
+            onClick={() => navigate(qa.to)}
+            className="group flex items-center gap-3 px-3.5 py-3 text-left transition-colors"
             style={{
-              animationDelay: `${i * 80}ms`,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)',
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor = qa.color;
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 2px 8px ${qa.color}22`;
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb';
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
             }}
           >
-            {/* Animated top accent border */}
             <div
-              className="absolute top-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              style={{ background: `linear-gradient(90deg, ${stat.accentFrom ?? '#4f46e5'}, ${stat.accentTo ?? '#0d9488'})` }}
-            />
-            {/* Radial glow orb */}
-            <div className={cn(
-              'absolute -top-10 -right-10 w-28 h-28 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500',
-              stat.bgGlow
-            )} />
+              className="flex items-center justify-center w-7 h-7 rounded-md flex-shrink-0"
+              style={{ background: `${qa.color}18` }}
+            >
+              <qa.icon className="w-3.5 h-3.5" style={{ color: qa.color }} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200 truncate leading-tight">{qa.label}</p>
+              <p className="text-[11px] text-gray-400 truncate leading-tight mt-0.5">{qa.desc}</p>
+            </div>
+            <ChevronRight className="w-3.5 h-3.5 text-gray-300 ml-auto flex-shrink-0 group-hover:text-gray-500 transition-colors" />
+          </button>
+        ))}
+      </div>
 
-            <div className="relative flex items-start justify-between">
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-semibold text-surface-400 dark:text-surface-500 uppercase tracking-widest">
-                  {stat.title}
-                </p>
-                <p className="text-3xl font-extrabold text-surface-900 dark:text-white tracking-tight tabular-nums">
-                  {typeof stat.value === 'number' ? <AnimatedValue value={stat.value} /> : stat.value}
-                </p>
-              </div>
-              <div className={cn('p-2.5 rounded-xl bg-gradient-to-br shadow-md', stat.gradient)}>
-                <stat.icon className="w-4 h-4 text-white" />
-              </div>
+      {/* ── Stat cards ──────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {statCards.map((stat) => (
+          <div key={stat.title} className="card">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-gray-400">{stat.title}</p>
+              <span className={cn('status-dot', stat.dotClass)} />
             </div>
-            <div className="relative mt-3 flex items-center gap-1 text-xs">
-              {stat.trendUp ? <ArrowUpRight className="w-3 h-3 text-emerald-500" /> : <ArrowDownRight className="w-3 h-3 text-red-500" />}
-              <span className={cn('font-semibold', stat.trendUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
-                {stat.trend}
-              </span>
-              <span className="text-surface-400 dark:text-surface-500 ml-0.5">from tests</span>
-            </div>
+            <p className="text-3xl font-semibold text-gray-900 dark:text-white font-tabular leading-none">
+              {typeof stat.value === 'number' ? <AnimatedValue value={stat.value} /> : stat.value}
+            </p>
+            <p className="text-[11px] text-gray-400 mt-2">{stat.trend}</p>
           </div>
         ))}
       </div>
 
-      {/* ── Charts Row ─────────────────────────────────────── */}
+      {/* ── Charts ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Response Time Chart */}
+        {/* Response time */}
         <div className="card">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-sm font-semibold text-surface-900 dark:text-white flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-indigo-500" />
                 Response Time
               </h3>
-              <p className="text-xs text-surface-400 mt-0.5">Last 20 requests in ms</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Last 20 requests (ms)</p>
             </div>
             {responseTimeData.length > 0 && (
-              <div className="text-xs font-mono px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
+              <span className="tag font-tabular">
                 avg {stats.avgResponseTime > 0 ? `${(stats.avgResponseTime * 1000).toFixed(0)}ms` : '—'}
-              </div>
+              </span>
             )}
           </div>
           {responseTimeData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={responseTimeData}>
                 <defs>
-                  <linearGradient id="timeGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity={0.25} />
-                    <stop offset="50%" stopColor="#818cf8" stopOpacity={0.1} />
+                  <linearGradient id="tGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6366f1" stopOpacity={0.18} />
                     <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
-                <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} unit="ms" />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value) => [`${value}ms`, 'Response Time']}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="time"
-                  stroke="#6366f1"
-                  strokeWidth={2.5}
-                  fill="url(#timeGradient)"
-                  dot={{ fill: '#6366f1', r: 3, strokeWidth: 0 }}
-                  activeDot={{ r: 5, fill: '#6366f1', stroke: '#fff', strokeWidth: 2 }}
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+                <XAxis dataKey="name" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} unit="ms" />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}ms`, 'Response Time']} />
+                <Area type="monotone" dataKey="time" stroke="#6366f1" strokeWidth={2} fill="url(#tGrad)"
+                  dot={{ fill: '#6366f1', r: 2.5, strokeWidth: 0 }}
+                  activeDot={{ r: 4, fill: '#6366f1', stroke: '#fff', strokeWidth: 2 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="empty-state py-10">
-              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 mb-3">
-                <TrendingUp className="w-8 h-8 text-indigo-400" />
-              </div>
-              <p className="text-sm font-medium text-surface-500 dark:text-surface-400">Run some requests to see trends</p>
+            <div className="empty-state h-[200px]">
+              <TrendingUp className="w-8 h-8 empty-state-icon" />
+              <p className="text-sm">Run requests to see latency trends</p>
             </div>
           )}
         </div>
 
-        {/* Success Rate Chart */}
+        {/* Success rate */}
         <div className="card">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-sm font-semibold text-surface-900 dark:text-white flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-emerald-500" />
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
                 Success Rate
               </h3>
-              <p className="text-xs text-surface-400 mt-0.5">Cumulative success % over requests</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Cumulative % over requests</p>
             </div>
             {successRateData.length > 0 && (
-              <div className={cn(
-                'text-xs font-bold px-2.5 py-1 rounded-lg',
-                stats.successRate >= 95
-                  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                  : stats.successRate >= 80
-                    ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
-                    : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-              )}>
+              <span className={cn('tag font-tabular', stats.successRate >= 95 ? 'text-green-600' : stats.successRate >= 80 ? 'text-amber-600' : 'text-red-600')}>
                 {stats.successRate.toFixed(0)}%
-              </div>
+              </span>
             )}
           </div>
           {successRateData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={successRateData}>
                 <defs>
-                  <linearGradient id="successGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.25} />
-                    <stop offset="50%" stopColor="#34d399" stopOpacity={0.1} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                  <linearGradient id="sGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#16a34a" stopOpacity={0.15} />
+                    <stop offset="100%" stopColor="#16a34a" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
-                <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} domain={[0, 100]} unit="%" />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value) => [`${value}%`, 'Success Rate']}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="rate"
-                  stroke="#10b981"
-                  strokeWidth={2.5}
-                  fill="url(#successGradient)"
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+                <XAxis dataKey="name" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} domain={[0, 100]} unit="%" />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}%`, 'Success Rate']} />
+                <Area type="monotone" dataKey="rate" stroke="#16a34a" strokeWidth={2} fill="url(#sGrad)"
                   dot={(props: Record<string, unknown>) => {
                     const { cx, cy, payload } = props as { cx: number; cy: number; payload: { status: string } };
-                    return (
-                      <circle
-                        key={`dot-${cx}-${cy}`}
-                        cx={cx}
-                        cy={cy}
-                        r={4}
-                        fill={payload.status === 'pass' ? '#10b981' : '#ef4444'}
-                        stroke="#fff"
-                        strokeWidth={1.5}
-                      />
-                    );
+                    return <circle key={`d-${cx}`} cx={cx} cy={cy} r={3} fill={payload.status === 'pass' ? '#16a34a' : '#dc2626'} stroke="#fff" strokeWidth={1.5} />;
                   }}
-                  activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+                  activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="empty-state py-10">
-              <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 mb-3">
-                <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-              </div>
-              <p className="text-sm font-medium text-surface-500 dark:text-surface-400">Success metrics will appear here</p>
+            <div className="empty-state h-[200px]">
+              <CheckCircle2 className="w-8 h-8 empty-state-icon" />
+              <p className="text-sm">Success metrics appear after requests</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Bottom Row: Method Distribution + Recent Requests ── */}
+      {/* ── Bottom row ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Method Distribution */}
+        {/* Method distribution */}
         <div className="card">
-          <h3 className="text-sm font-semibold text-surface-900 dark:text-white flex items-center gap-2 mb-4">
-            <Globe className="w-4 h-4 text-purple-500" />
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2 mb-4">
+            <Globe className="w-4 h-4 text-indigo-400" />
             Method Distribution
           </h3>
           {methodDistribution.length > 0 ? (
             <>
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={methodDistribution} barCategoryGap="20%">
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
-                  <XAxis dataKey="method" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
+              <ResponsiveContainer width="100%" height={140}>
+                <BarChart data={methodDistribution} barCategoryGap="24%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+                  <XAxis dataKey="method" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                    {methodDistribution.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.fill} fillOpacity={0.85} />
-                    ))}
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {methodDistribution.map((e, i) => <Cell key={i} fill={e.fill} fillOpacity={0.8} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-              <div className="flex flex-wrap gap-2 mt-3">
+              <div className="flex flex-wrap gap-1.5 mt-3">
                 {methodDistribution.map((m) => (
-                  <span
-                    key={m.method}
-                    className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md"
-                    style={{ backgroundColor: `${m.fill}15`, color: m.fill }}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: m.fill }} />
-                    {m.method} ({m.count})
+                  <span key={m.method} className="method-badge" style={{ background: `${m.fill}18`, color: m.fill }}>
+                    {m.method} {m.count}
                   </span>
                 ))}
               </div>
             </>
           ) : (
-            <div className="empty-state py-8">
-              <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-900/20 mb-3">
-                <Globe className="w-8 h-8 text-purple-400" />
-              </div>
-              <p className="text-sm font-medium text-surface-500 dark:text-surface-400">No method data yet</p>
+            <div className="empty-state h-[140px]">
+              <Globe className="w-7 h-7 empty-state-icon" />
+              <p className="text-[13px]">No method data yet</p>
             </div>
           )}
         </div>
 
-        {/* Recent Requests */}
-        <div className="card !p-0 overflow-hidden lg:col-span-2">
-          <div className="px-6 py-4 border-b border-surface-100 dark:border-surface-700/50 bg-surface-50/50 dark:bg-surface-800/30">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-surface-900 dark:text-white flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-500" />
-                Recent Requests
-              </h3>
-              {recentTests.length > 0 && (
-                <span className="text-[10px] font-medium text-surface-400 bg-surface-100 dark:bg-surface-700/50 px-2 py-0.5 rounded-full">
-                  {testHistory.length} total
-                </span>
-              )}
-            </div>
+        {/* Recent requests */}
+        <div className="lg:col-span-2" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-400" />
+              Recent Requests
+            </h3>
+            {recentTests.length > 0 && (
+              <span className="tag">{testHistory.length} total</span>
+            )}
           </div>
 
           {recentTests.length === 0 ? (
-            <div className="empty-state py-12">
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 mb-4">
-                <Zap className="w-10 h-10 text-indigo-500 dark:text-indigo-400" />
-              </div>
-              <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-200">No requests yet</h3>
-              <p className="text-xs text-surface-400 mt-1 max-w-[200px] mx-auto">
-                Execute your first API request to see results here
-              </p>
+            <div className="empty-state py-10">
+              <Send className="w-8 h-8 empty-state-icon" />
+              <p className="text-sm font-medium text-gray-600">No requests yet</p>
+              <p className="text-[12px] text-gray-400">Send your first API request to see results here</p>
             </div>
           ) : (
-            <div className="divide-y divide-surface-100 dark:divide-surface-800/50">
-              {recentTests.map((test, idx) => (
-                <div
-                  key={idx}
-                  className="px-6 py-3 hover:bg-surface-50 dark:hover:bg-surface-800/30 transition-all duration-200 group/row"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {test.success ? (
-                        <div className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                        </div>
-                      ) : (
-                        <div className="p-1 rounded-lg bg-red-50 dark:bg-red-900/20">
-                          <XCircle className="w-3.5 h-3.5 text-red-500" />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            'text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded',
-                            test.request_method === 'GET' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' :
-                            test.request_method === 'POST' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' :
-                            test.request_method === 'PUT' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' :
-                            test.request_method === 'DELETE' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
-                            'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400'
-                          )}>
-                            {test.request_method}
-                          </span>
-                          <span className="font-mono text-xs text-surface-700 dark:text-surface-300 truncate group-hover/row:text-surface-900 dark:group-hover/row:text-white transition-colors">
-                            {test.request_url}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-surface-400 mt-0.5 tabular-nums">
-                          {new Date(test.timestamp).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <span className={cn(
-                        'text-xs font-bold tabular-nums px-2 py-0.5 rounded-md',
-                        test.success
-                          ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                      )}>
-                        {test.status_code || 'ERR'}
-                      </span>
-                      <span className="text-xs text-surface-400 tabular-nums font-mono">
-                        {(test.response_time * 1000).toFixed(0)}ms
-                      </span>
-                    </div>
+            <div className="divide-y divide-gray-50">
+              {recentTests.map((test, idx) => {
+                const m = test.request_method || 'GET';
+                const sc = test.status_code;
+                const scClass = !sc ? '' : sc < 300 ? 'status-2xx' : sc < 400 ? 'status-3xx' : sc < 500 ? 'status-4xx' : 'status-5xx';
+                return (
+                  <div key={idx} className="flex items-center gap-3 px-5 py-2.5 hover:bg-gray-50 transition-colors">
+                    <span className={cn('method-badge', `method-${m}`)}>{m}</span>
+                    <span className="font-mono text-[12.5px] text-gray-700 truncate flex-1 min-w-0" title={test.request_url}>
+                      {test.request_url}
+                    </span>
+                    <span className={cn('font-mono text-[12.5px] font-semibold font-tabular flex-shrink-0', scClass)}>
+                      {sc || 'ERR'}
+                    </span>
+                    <span className="text-[11px] text-gray-400 font-tabular flex-shrink-0 w-14 text-right">
+                      {(test.response_time * 1000).toFixed(0)}ms
+                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
