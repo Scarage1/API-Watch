@@ -44,7 +44,7 @@ pytest==8.4.2
 pytest-asyncio==0.24.0
 
 # Performance
-orjson==3.10.18
+orjson==3.11.9
 
 # CLI
 click==8.1.8
