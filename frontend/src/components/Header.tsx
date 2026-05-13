@@ -32,7 +32,7 @@ export default function Header() {
 
   useEffect(() => {
     mountedRef.current = true;
-    void checkHealth();
+    setTimeout(() => { void checkHealth(); }, 0);
     const id = setInterval(checkHealth, 30_000);
     return () => { mountedRef.current = false; clearInterval(id); };
   }, [checkHealth]);
