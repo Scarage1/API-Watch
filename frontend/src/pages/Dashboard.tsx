@@ -101,10 +101,10 @@ export default function Dashboard() {
   }, [testHistory]);
 
   const quickActions = [
-    { label: 'HTTP Request', icon: Send,   to: '/request',   desc: 'REST & HTTP',    color: '#6366f1' },
-    { label: 'WebSocket',    icon: Plug,   to: '/websocket', desc: 'Real-time WS',   color: '#7c3aed' },
-    { label: 'GraphQL',      icon: Braces, to: '/graphql',   desc: 'Query & Mutate', color: '#ec4899' },
-    { label: 'SSE Client',   icon: Radio,  to: '/sse',       desc: 'Event streams',  color: '#0891b2' },
+    { label: 'HTTP Request', icon: Send,   to: '/app/request',   desc: 'REST & HTTP',    color: '#6366f1' },
+    { label: 'WebSocket',    icon: Plug,   to: '/app/websocket', desc: 'Real-time WS',   color: '#7c3aed' },
+    { label: 'GraphQL',      icon: Braces, to: '/app/graphql',   desc: 'Query & Mutate', color: '#ec4899' },
+    { label: 'SSE Client',   icon: Radio,  to: '/app/sse',       desc: 'Event streams',  color: '#0891b2' },
   ];
 
   const tooltipStyle = {
@@ -131,11 +131,11 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => navigate('/request')} className="btn-primary gap-1.5">
+          <button onClick={() => navigate('/app/request')} className="btn-primary gap-1.5">
             <Send className="w-3.5 h-3.5" />
             New Request
           </button>
-          <button onClick={() => navigate('/monitors')} className="btn-secondary gap-1.5">
+          <button onClick={() => navigate('/app/monitors')} className="btn-secondary gap-1.5">
             <Activity className="w-3.5 h-3.5" />
             Monitors
           </button>
@@ -148,20 +148,14 @@ export default function Dashboard() {
           <button
             key={qa.to}
             onClick={() => navigate(qa.to)}
-            className="group flex items-center gap-3 px-3.5 py-3 text-left transition-colors"
-            style={{
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
-              borderRadius: '8px',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-            }}
+            className="quick-action-card group flex items-center gap-3 px-3.5 py-3 text-left transition-colors"
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLButtonElement).style.borderColor = qa.color;
               (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 2px 8px ${qa.color}22`;
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb';
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = '';
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = '';
             }}
           >
             <div
@@ -325,7 +319,7 @@ export default function Dashboard() {
         </div>
 
         {/* Recent requests */}
-        <div className="lg:col-span-2" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+        <div className="card !p-0 overflow-hidden lg:col-span-2">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
               <Clock className="w-4 h-4 text-indigo-400" />

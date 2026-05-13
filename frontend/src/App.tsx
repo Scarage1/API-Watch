@@ -12,54 +12,47 @@ import PerformancePanel from './components/PerformancePanel';
 import { migrateFromLocalStorage } from './lib/db';
 
 // ── Lazy-loaded pages ────────────────────────────────────────────────────────
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const SingleRequest = lazy(() => import('./pages/SingleRequest'));
-const TestSuites = lazy(() => import('./pages/TestSuites'));
-const Analytics = lazy(() => import('./pages/Analytics'));
-const History = lazy(() => import('./pages/History'));
-const Settings = lazy(() => import('./pages/Settings'));
-const WebSocketClient = lazy(() => import('./pages/WebSocketClient'));
-const GraphQLClient = lazy(() => import('./pages/GraphQLClient'));
-const SSEClient = lazy(() => import('./pages/SSEClient'));
-const MockServer = lazy(() => import('./pages/MockServer'));
-const Documentation = lazy(() => import('./pages/Documentation'));
-const TeamSettings = lazy(() => import('./pages/TeamSettings'));
-const ActivityFeed = lazy(() => import('./pages/ActivityFeed'));
+const Landing        = lazy(() => import('./pages/Landing'));
+const Dashboard      = lazy(() => import('./pages/Dashboard'));
+const SingleRequest  = lazy(() => import('./pages/SingleRequest'));
+const TestSuites     = lazy(() => import('./pages/TestSuites'));
+const Analytics      = lazy(() => import('./pages/Analytics'));
+const History        = lazy(() => import('./pages/History'));
+const Settings       = lazy(() => import('./pages/Settings'));
+const WebSocketClient= lazy(() => import('./pages/WebSocketClient'));
+const GraphQLClient  = lazy(() => import('./pages/GraphQLClient'));
+const SSEClient      = lazy(() => import('./pages/SSEClient'));
+const MockServer     = lazy(() => import('./pages/MockServer'));
+const Documentation  = lazy(() => import('./pages/Documentation'));
+const TeamSettings   = lazy(() => import('./pages/TeamSettings'));
+const ActivityFeed   = lazy(() => import('./pages/ActivityFeed'));
 const MonitorDashboard = lazy(() => import('./pages/MonitorDashboard'));
-const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'));
+const ApiKeysPage    = lazy(() => import('./pages/ApiKeysPage'));
 const ImportExportPage = lazy(() => import('./pages/ImportExportPage'));
-const NotFound = lazy(() => import('./pages/NotFound'));
+const NotFound       = lazy(() => import('./pages/NotFound'));
 
 function App() {
   const { darkMode } = useAppStore();
 
-  // Register global keyboard shortcuts
   useKeyboardShortcuts();
 
-  // Initialise dark mode from persisted state (single source of truth)
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
-  // Detect system preference on first visit (no stored preference yet)
   useEffect(() => {
     const stored = localStorage.getItem('api-watch-storage');
     if (!stored || !JSON.parse(stored)?.state?.darkMode) {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) {
-        useAppStore.getState().toggleDarkMode();
-      }
+      if (prefersDark) useAppStore.getState().toggleDarkMode();
     }
      
   }, []);
 
-  // Migrate localStorage data to IndexedDB on first load
   useEffect(() => {
     migrateFromLocalStorage()
       .then(({ migrated }) => {
-        if (migrated > 0) {
-          console.log(`[idb] Migrated ${migrated} history entries from localStorage`);
-        }
+        if (migrated > 0) console.log(`[idb] Migrated ${migrated} history entries`);
       })
       .catch((err) => console.warn('[idb] Migration failed:', err));
   }, []);
@@ -69,25 +62,30 @@ function App() {
       <ErrorBoundary>
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
-          <Route path="/" element={<Layout />}>
+          {/* ── Public landing page ── */}
+          <Route path="/" element={<ErrorBoundary><Landing /></ErrorBoundary>} />
+
+          {/* ── App shell (all tool pages) ── */}
+          <Route path="/app" element={<Layout />}>
             <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
-            <Route path="request" element={<ErrorBoundary><SingleRequest /></ErrorBoundary>} />
-            <Route path="suites" element={<ErrorBoundary><TestSuites /></ErrorBoundary>} />
-            <Route path="analytics" element={<ErrorBoundary><Analytics /></ErrorBoundary>} />
-            <Route path="history" element={<ErrorBoundary><History /></ErrorBoundary>} />
-            <Route path="websocket" element={<ErrorBoundary><WebSocketClient /></ErrorBoundary>} />
-            <Route path="graphql" element={<ErrorBoundary><GraphQLClient /></ErrorBoundary>} />
-            <Route path="sse" element={<ErrorBoundary><SSEClient /></ErrorBoundary>} />
-            <Route path="mocks" element={<ErrorBoundary><MockServer /></ErrorBoundary>} />
-            <Route path="docs" element={<ErrorBoundary><Documentation /></ErrorBoundary>} />
-            <Route path="teams" element={<ErrorBoundary><TeamSettings /></ErrorBoundary>} />
-            <Route path="activity" element={<ErrorBoundary><ActivityFeed /></ErrorBoundary>} />
-            <Route path="monitors" element={<ErrorBoundary><MonitorDashboard /></ErrorBoundary>} />
-            <Route path="api-keys" element={<ErrorBoundary><ApiKeysPage /></ErrorBoundary>} />
+            <Route path="request"       element={<ErrorBoundary><SingleRequest /></ErrorBoundary>} />
+            <Route path="suites"        element={<ErrorBoundary><TestSuites /></ErrorBoundary>} />
+            <Route path="analytics"     element={<ErrorBoundary><Analytics /></ErrorBoundary>} />
+            <Route path="history"       element={<ErrorBoundary><History /></ErrorBoundary>} />
+            <Route path="websocket"     element={<ErrorBoundary><WebSocketClient /></ErrorBoundary>} />
+            <Route path="graphql"       element={<ErrorBoundary><GraphQLClient /></ErrorBoundary>} />
+            <Route path="sse"           element={<ErrorBoundary><SSEClient /></ErrorBoundary>} />
+            <Route path="mocks"         element={<ErrorBoundary><MockServer /></ErrorBoundary>} />
+            <Route path="docs"          element={<ErrorBoundary><Documentation /></ErrorBoundary>} />
+            <Route path="teams"         element={<ErrorBoundary><TeamSettings /></ErrorBoundary>} />
+            <Route path="activity"      element={<ErrorBoundary><ActivityFeed /></ErrorBoundary>} />
+            <Route path="monitors"      element={<ErrorBoundary><MonitorDashboard /></ErrorBoundary>} />
+            <Route path="api-keys"      element={<ErrorBoundary><ApiKeysPage /></ErrorBoundary>} />
             <Route path="import-export" element={<ErrorBoundary><ImportExportPage /></ErrorBoundary>} />
-            <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
+            <Route path="settings"      element={<ErrorBoundary><Settings /></ErrorBoundary>} />
           </Route>
-          {/* Catch-all — always last */}
+
+          {/* Catch-all */}
           <Route path="*" element={<ErrorBoundary><NotFound /></ErrorBoundary>} />
         </Routes>
       </Suspense>
@@ -101,4 +99,3 @@ function App() {
 }
 
 export default App;
-

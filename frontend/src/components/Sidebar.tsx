@@ -12,22 +12,22 @@ import { useState } from 'react';
 import AIPanel from './AIPanel';
 
 const navItems = [
-  { to: '/',             icon: LayoutDashboard, label: 'Dashboard',    section: 'build' },
-  { to: '/request',      icon: Send,            label: 'Request',      section: 'build' },
-  { to: '/suites',       icon: FolderOpen,      label: 'Test Suites',  section: 'build' },
-  { to: '/websocket',    icon: Plug,            label: 'WebSocket',    section: 'build' },
-  { to: '/graphql',      icon: Braces,          label: 'GraphQL',      section: 'build' },
-  { to: '/sse',          icon: Radio,           label: 'SSE Client',   section: 'build' },
-  { to: '/mocks',        icon: Server,          label: 'Mock Server',  section: 'tools' },
-  { to: '/monitors',     icon: Radar,           label: 'Monitors',     section: 'tools' },
-  { to: '/import-export',icon: FileUp,          label: 'Import/Export',section: 'tools' },
-  { to: '/docs',         icon: FileText,        label: 'Docs',         section: 'tools' },
-  { to: '/analytics',    icon: BarChart3,       label: 'Analytics',    section: 'insights' },
-  { to: '/history',      icon: Clock,           label: 'History',      section: 'insights' },
-  { to: '/activity',     icon: Activity,        label: 'Activity',     section: 'insights' },
-  { to: '/teams',        icon: Users,           label: 'Teams',        section: 'system' },
-  { to: '/api-keys',     icon: Key,             label: 'API Keys',     section: 'system' },
-  { to: '/settings',     icon: Settings,        label: 'Settings',     section: 'system' },
+  { to: '/app',             icon: LayoutDashboard, label: 'Dashboard',    section: 'build' },
+  { to: '/app/request',     icon: Send,            label: 'Request',      section: 'build' },
+  { to: '/app/suites',      icon: FolderOpen,      label: 'Test Suites',  section: 'build' },
+  { to: '/app/websocket',   icon: Plug,            label: 'WebSocket',    section: 'build' },
+  { to: '/app/graphql',     icon: Braces,          label: 'GraphQL',      section: 'build' },
+  { to: '/app/sse',         icon: Radio,           label: 'SSE Client',   section: 'build' },
+  { to: '/app/mocks',       icon: Server,          label: 'Mock Server',  section: 'tools' },
+  { to: '/app/monitors',    icon: Radar,           label: 'Monitors',     section: 'tools' },
+  { to: '/app/import-export',icon: FileUp,         label: 'Import/Export',section: 'tools' },
+  { to: '/app/docs',        icon: FileText,        label: 'Docs',         section: 'tools' },
+  { to: '/app/analytics',   icon: BarChart3,       label: 'Analytics',    section: 'insights' },
+  { to: '/app/history',     icon: Clock,           label: 'History',      section: 'insights' },
+  { to: '/app/activity',    icon: Activity,        label: 'Activity',     section: 'insights' },
+  { to: '/app/teams',       icon: Users,           label: 'Teams',        section: 'system' },
+  { to: '/app/api-keys',    icon: Key,             label: 'API Keys',     section: 'system' },
+  { to: '/app/settings',    icon: Settings,        label: 'Settings',     section: 'system' },
 ];
 
 const sectionGroups = [
@@ -95,7 +95,7 @@ export default function Sidebar() {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end={item.to === '/'}
+                    end={item.to === '/app'}
                     aria-label={item.label}
                     className={({ isActive }) =>
                       cn('nav-item', isActive && 'active')
