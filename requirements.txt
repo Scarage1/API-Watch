@@ -20,7 +20,7 @@ gunicorn==23.0.0
 
 # Pydantic for data validation
 pydantic==2.12.5
-pydantic-settings==2.11.0
+pydantic-settings==2.14.1
 
 # Database — SQLite (dev) + PostgreSQL (prod)
 aiosqlite==0.22.1
