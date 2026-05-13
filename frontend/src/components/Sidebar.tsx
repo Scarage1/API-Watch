@@ -197,7 +197,7 @@ export default function Sidebar() {
             <div className="px-3 py-2 flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-soft shadow-[0_0_4px_rgba(16,185,129,0.5)]" />
               <p className="text-[11px] font-medium text-surface-400 dark:text-surface-600">
-                API-Watch v2.2
+                API-Watch v3.0 Enterprise
               </p>
             </div>
           </div>
