@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Zap, Send, FolderOpen, BarChart3, ArrowRight, Keyboard } from 'lucide-react';
+import {
+  Zap, Send, FolderOpen, BarChart3, ArrowRight,
+  Keyboard, X, ChevronRight,
+} from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const ONBOARDING_KEY = 'api-watch-onboarding-seen';
@@ -7,46 +10,55 @@ const ONBOARDING_KEY = 'api-watch-onboarding-seen';
 const steps = [
   {
     icon: Send,
-    title: 'Send Requests',
-    description: 'Build and send HTTP requests with full control over headers, params, body, and auth.',
-    color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20',
+    title: 'Send HTTP Requests',
+    description: 'Build and fire REST requests with full control over headers, params, body, and auth.',
+    gradient: 'from-indigo-500 to-brand-600',
+    bg: 'bg-indigo-50 dark:bg-indigo-900/20',
   },
   {
     icon: FolderOpen,
     title: 'Organize Collections',
-    description: 'Save requests into collections, import from Postman, and share with your team.',
-    color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20',
+    description: 'Save requests, import from Postman or OpenAPI, and share with your team.',
+    gradient: 'from-emerald-500 to-teal-600',
+    bg: 'bg-emerald-50 dark:bg-emerald-900/20',
   },
   {
     icon: BarChart3,
-    title: 'Analyze & Test',
-    description: 'Run test suites, write assertions, and track performance with rich analytics.',
-    color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/20',
+    title: 'Test & Analyze',
+    description: 'Write assertions, run test suites, and track performance with live analytics.',
+    gradient: 'from-purple-500 to-fuchsia-600',
+    bg: 'bg-purple-50 dark:bg-purple-900/20',
   },
   {
     icon: Keyboard,
-    title: 'Keyboard Shortcuts',
-    description: '⌘K for command palette, ⌘T for new tab, ⌘W to close tab, ⌘⇧D to duplicate.',
-    color: 'text-amber-500 bg-amber-50 dark:bg-amber-900/20',
+    title: 'Keyboard-First',
+    description: '⌘K command palette · ⌘T new tab · ⌘W close · ⌘↵ send request',
+    gradient: 'from-amber-500 to-orange-500',
+    bg: 'bg-amber-50 dark:bg-amber-900/20',
   },
 ];
 
 export default function OnboardingModal() {
   const [visible, setVisible] = useState(false);
-  const [step, setStep] = useState(0);
+  const [mounted, setMounted] = useState(false);
+  const [step, setStep]       = useState(0);
 
   useEffect(() => {
-    const seen = localStorage.getItem(ONBOARDING_KEY);
-    if (!seen) {
-      // Small delay so the app loads first
-      const timer = setTimeout(() => setVisible(true), 600);
-      return () => clearTimeout(timer);
+    if (!localStorage.getItem(ONBOARDING_KEY)) {
+      const t = setTimeout(() => {
+        setVisible(true);
+        requestAnimationFrame(() => setMounted(true));
+      }, 800);
+      return () => clearTimeout(t);
     }
   }, []);
 
   const dismiss = () => {
-    localStorage.setItem(ONBOARDING_KEY, 'true');
-    setVisible(false);
+    setMounted(false);
+    setTimeout(() => {
+      setVisible(false);
+      localStorage.setItem(ONBOARDING_KEY, 'true');
+    }, 350);
   };
 
   const next = () => {
@@ -57,83 +69,106 @@ export default function OnboardingModal() {
   if (!visible) return null;
 
   const current = steps[step];
-  const Icon = current.icon;
+  const Icon    = current.icon;
 
   return (
     <div
-      className="fixed inset-0 z-[250] flex items-center justify-center"
+      className={cn(
+        'fixed bottom-6 right-6 z-[200] w-80 transition-all duration-350',
+        'ease-[cubic-bezier(0.34,1.56,0.64,1)]',
+        mounted
+          ? 'opacity-100 translate-y-0 scale-100'
+          : 'opacity-0 translate-y-8 scale-95'
+      )}
       role="dialog"
-      aria-modal="true"
+      aria-modal="false"
       aria-label="Welcome to API-Watch"
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-
       {/* Card */}
-      <div className="relative bg-white dark:bg-surface-900 rounded-2xl shadow-2xl border border-surface-200 dark:border-surface-700 max-w-md w-full mx-4 overflow-hidden animate-fade-in">
-        {/* Header accent */}
-        <div className="h-1.5 bg-gradient-to-r from-brand-500 via-brand-600 to-purple-600" />
+      <div className="relative bg-white dark:bg-surface-900 rounded-2xl shadow-lifted dark:shadow-lifted-dark border border-surface-200/80 dark:border-surface-700/80 overflow-hidden">
 
-        <div className="p-8 text-center">
-          {/* Logo */}
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-brand-500 to-brand-700 rounded-2xl shadow-lg mb-4">
-            <Zap className="w-7 h-7 text-white" />
+        {/* Top accent gradient bar */}
+        <div className={cn('h-1 w-full bg-gradient-to-r', current.gradient)} />
+
+        {/* Dismiss button */}
+        <button
+          onClick={dismiss}
+          className="absolute top-3 right-3 p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+          aria-label="Dismiss"
+        >
+          <X className="w-3.5 h-3.5 text-surface-400" />
+        </button>
+
+        <div className="p-5">
+          {/* Brand mark */}
+          <div className="flex items-center gap-2 mb-4">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg, #4f46e5, #0d9488)' }}
+            >
+              <Zap className="w-3.5 h-3.5 text-white" />
+            </div>
+            <div>
+              <p className="text-[11px] font-bold text-surface-900 dark:text-white">
+                API<span className="text-brand-500">Watch</span>
+              </p>
+              <p className="text-[9px] text-surface-400 uppercase tracking-widest">Quick Start</p>
+            </div>
           </div>
 
-          <h2 className="text-xl font-bold text-surface-900 dark:text-white mb-1">
-            Welcome to API<span className="text-brand-600 dark:text-brand-400">Watch</span>
-          </h2>
-          <p className="text-sm text-surface-500 dark:text-surface-400 mb-8">
-            The modern API development workspace
-          </p>
-
-          {/* Step content */}
-          <div className="mb-8">
-            <div className={cn('inline-flex items-center justify-center w-12 h-12 rounded-xl mb-3', current.color)}>
-              <Icon className="w-6 h-6" />
+          {/* Step icon */}
+          <div className="mb-3">
+            <div className={cn('inline-flex items-center justify-center w-10 h-10 rounded-xl mb-3 transition-all duration-300', current.bg)}>
+              <Icon className={cn('w-5 h-5', `text-gradient-to-br ${current.gradient}`)} style={{ color: 'currentColor' }} />
             </div>
-            <h3 className="text-sm font-semibold text-surface-900 dark:text-white mb-1">
+            <h3 className="text-sm font-bold text-surface-900 dark:text-white mb-1">
               {current.title}
             </h3>
-            <p className="text-sm text-surface-500 dark:text-surface-400 max-w-xs mx-auto">
+            <p className="text-xs text-surface-500 dark:text-surface-400 leading-relaxed">
               {current.description}
             </p>
           </div>
 
-          {/* Step dots */}
-          <div className="flex items-center justify-center gap-1.5 mb-6">
+          {/* Progress dots */}
+          <div className="flex items-center gap-1.5 mb-4">
             {steps.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setStep(i)}
                 className={cn(
-                  'w-2 h-2 rounded-full transition-all',
-                  i === step ? 'w-6 bg-brand-600' : 'bg-surface-200 dark:bg-surface-700'
+                  'h-1.5 rounded-full transition-all duration-300',
+                  i === step
+                    ? 'w-6 bg-brand-600 dark:bg-brand-400'
+                    : 'w-1.5 bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600'
                 )}
-                aria-label={`Step ${i + 1}`}
+                aria-label={`Go to step ${i + 1}`}
               />
             ))}
+            <span className="ml-auto text-[10px] font-medium text-surface-400 tabular-nums">
+              {step + 1}/{steps.length}
+            </span>
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={dismiss}
-              className="px-4 py-2 text-sm font-medium text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 transition-colors"
+              className="text-xs text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 transition-colors px-2 py-1.5"
             >
-              Skip
+              Skip all
             </button>
             <button
               onClick={next}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-800 text-white text-sm font-medium shadow-sm transition-all"
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 py-2 px-4 rounded-xl text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5',
+                `bg-gradient-to-r ${current.gradient}`,
+              )}
+              style={{ boxShadow: '0 2px 8px rgba(79,70,229,0.3)' }}
             >
               {step < steps.length - 1 ? (
-                <>
-                  Next
-                  <ArrowRight className="w-4 h-4" />
-                </>
+                <>Next <ChevronRight className="w-3.5 h-3.5" /></>
               ) : (
-                'Get Started'
+                <>Let's go! <ArrowRight className="w-3.5 h-3.5" /></>
               )}
             </button>
           </div>

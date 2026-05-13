@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Activity,
   CheckCircle2,
@@ -8,10 +9,14 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Zap,
-  Layers,
   Globe,
   Sparkles,
   Clock,
+  Send,
+  Braces,
+  Plug,
+  Radio,
+  ChevronRight,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -125,6 +130,8 @@ export default function Dashboard() {
       trendUp: true,
       gradient: 'from-indigo-500 to-blue-600',
       bgGlow: 'bg-indigo-500/10',
+      accentFrom: '#6366f1',
+      accentTo: '#3b82f6',
     },
     {
       title: 'Successful',
@@ -134,6 +141,8 @@ export default function Dashboard() {
       trendUp: true,
       gradient: 'from-emerald-500 to-teal-600',
       bgGlow: 'bg-emerald-500/10',
+      accentFrom: '#10b981',
+      accentTo: '#0d9488',
     },
     {
       title: 'Failed',
@@ -143,6 +152,8 @@ export default function Dashboard() {
       trendUp: false,
       gradient: 'from-rose-500 to-red-600',
       bgGlow: 'bg-rose-500/10',
+      accentFrom: '#f43f5e',
+      accentTo: '#ef4444',
     },
     {
       title: 'Avg Response',
@@ -152,6 +163,8 @@ export default function Dashboard() {
       trendUp: stats.avgResponseTime < 0.5,
       gradient: 'from-amber-500 to-orange-600',
       bgGlow: 'bg-amber-500/10',
+      accentFrom: '#f59e0b',
+      accentTo: '#ea580c',
     },
   ];
 
@@ -211,70 +224,123 @@ export default function Dashboard() {
     backdropFilter: 'blur(8px)',
   };
 
+  const navigate = useNavigate();
+
+  const quickActions = [
+    { label: 'HTTP Request', icon: Send,    to: '/request',   gradient: 'from-indigo-500 to-brand-600',  desc: 'REST & HTTP' },
+    { label: 'WebSocket',    icon: Plug,    to: '/websocket', gradient: 'from-violet-500 to-purple-600', desc: 'Real-time' },
+    { label: 'GraphQL',      icon: Braces,  to: '/graphql',   gradient: 'from-pink-500 to-rose-600',     desc: 'Query & Mutate' },
+    { label: 'SSE Client',   icon: Radio,   to: '/sse',       gradient: 'from-teal-500 to-accent-600',   desc: 'Event streams' },
+  ];
+
   return (
     <div className="space-y-6 page-enter">
-      {/* ── Header with status ──────────────────────────────── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/25">
-              <Layers className="w-5 h-5 text-white" />
+
+      {/* ── Hero Banner ─────────────────────────────────────── */}
+      <div
+        className="relative overflow-hidden rounded-2xl p-6 border border-brand-200/30 dark:border-brand-800/30"
+        style={{
+          background: 'linear-gradient(135deg, rgba(79,70,229,0.08) 0%, rgba(124,58,237,0.06) 50%, rgba(13,148,136,0.05) 100%)',
+        }}
+      >
+        {/* Animated mesh background */}
+        <div className="absolute inset-0 gradient-mesh opacity-60 pointer-events-none" />
+        {/* Floating glow orbs */}
+        <div className="absolute -top-8 -right-8 w-40 h-40 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-accent-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <StatusDot status={systemStatus} />
+              <span className="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-widest">
+                {systemStatus === 'healthy' ? 'All Systems Operational' : systemStatus === 'warning' ? 'Degraded' : 'Issues Detected'}
+              </span>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-surface-900 dark:text-white tracking-tight">
-                Dashboard
-              </h1>
-              <p className="text-sm text-surface-500 dark:text-surface-400">
-                Real-time API performance overview
-              </p>
-            </div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-surface-900 dark:text-white">
+              Welcome to{' '}
+              <span className="gradient-text">API-Watch</span>
+            </h1>
+            <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
+              Your enterprise API testing & monitoring platform
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/request')}
+              className="btn-primary text-sm gap-2"
+            >
+              <Zap className="w-4 h-4" />
+              New Request
+            </button>
+            <button
+              onClick={() => navigate('/monitors')}
+              className="btn-secondary text-sm"
+            >
+              <Sparkles className="w-4 h-4" />
+              Monitors
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-100 dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700/50">
-          <StatusDot status={systemStatus} />
-          <span className="text-xs font-medium text-surface-600 dark:text-surface-300 capitalize">
-            {systemStatus === 'healthy' ? 'All Systems Operational' : systemStatus === 'warning' ? 'Degraded Performance' : 'Issues Detected'}
-          </span>
+
+        {/* Quick action pills */}
+        <div className="relative mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {quickActions.map((qa) => (
+            <button
+              key={qa.to}
+              onClick={() => navigate(qa.to)}
+              className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-surface-800/70 border border-white/60 dark:border-surface-700/50 hover:border-brand-300 dark:hover:border-brand-700 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md text-left"
+            >
+              <div className={cn('p-1.5 rounded-lg bg-gradient-to-br shadow-sm flex-shrink-0', qa.gradient)}>
+                <qa.icon className="w-3 h-3 text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-surface-800 dark:text-surface-200 truncate">{qa.label}</p>
+                <p className="text-[10px] text-surface-400 dark:text-surface-500 truncate">{qa.desc}</p>
+              </div>
+              <ChevronRight className="w-3 h-3 text-surface-300 dark:text-surface-600 ml-auto flex-shrink-0 group-hover:text-brand-400 group-hover:translate-x-0.5 transition-all" />
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ── Stats Grid with gradients ──────────────────────── */}
+      {/* ── Stats Grid ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat, i) => (
           <div
             key={stat.title}
-            className="group relative overflow-hidden rounded-2xl bg-white dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700/50 p-5 transition-all duration-300 hover:shadow-lg hover:shadow-surface-900/5 dark:hover:shadow-black/20 hover:-translate-y-0.5"
-            style={{ animationDelay: `${i * 80}ms` }}
+            className="group relative overflow-hidden rounded-2xl bg-white dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700/50 p-5 transition-all duration-300 hover:-translate-y-1 cursor-default"
+            style={{
+              animationDelay: `${i * 80}ms`,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)',
+            }}
           >
-            {/* Gradient glow on hover */}
+            {/* Animated top accent border */}
+            <div
+              className="absolute top-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              style={{ background: `linear-gradient(90deg, ${stat.accentFrom ?? '#4f46e5'}, ${stat.accentTo ?? '#0d9488'})` }}
+            />
+            {/* Radial glow orb */}
             <div className={cn(
-              'absolute -top-12 -right-12 w-32 h-32 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500',
+              'absolute -top-10 -right-10 w-28 h-28 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500',
               stat.bgGlow
             )} />
 
             <div className="relative flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold text-surface-400 dark:text-surface-500 uppercase tracking-widest">
                   {stat.title}
                 </p>
-                <p className="text-3xl font-extrabold text-surface-900 dark:text-white tracking-tight">
-                  {typeof stat.value === 'number' ? (
-                    <AnimatedValue value={stat.value} />
-                  ) : (
-                    stat.value
-                  )}
+                <p className="text-3xl font-extrabold text-surface-900 dark:text-white tracking-tight tabular-nums">
+                  {typeof stat.value === 'number' ? <AnimatedValue value={stat.value} /> : stat.value}
                 </p>
               </div>
-              <div className={cn('p-2.5 rounded-xl bg-gradient-to-br shadow-lg', stat.gradient)}>
+              <div className={cn('p-2.5 rounded-xl bg-gradient-to-br shadow-md', stat.gradient)}>
                 <stat.icon className="w-4 h-4 text-white" />
               </div>
             </div>
             <div className="relative mt-3 flex items-center gap-1 text-xs">
-              {stat.trendUp ? (
-                <ArrowUpRight className="w-3 h-3 text-emerald-500" />
-              ) : (
-                <ArrowDownRight className="w-3 h-3 text-red-500" />
-              )}
+              {stat.trendUp ? <ArrowUpRight className="w-3 h-3 text-emerald-500" /> : <ArrowDownRight className="w-3 h-3 text-red-500" />}
               <span className={cn('font-semibold', stat.trendUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
                 {stat.trend}
               </span>

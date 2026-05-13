@@ -126,45 +126,44 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
     URL.revokeObjectURL(url);
   };
 
-  const statusColor = !response.status_code
-    ? 'text-red-500'
+  const statusBadgeClass = !response.status_code
+    ? 'status-5xx'
     : response.status_code < 300
-      ? 'text-emerald-500'
+      ? 'status-2xx'
       : response.status_code < 400
-        ? 'text-blue-500'
+        ? 'status-3xx'
         : response.status_code < 500
-          ? 'text-amber-500'
-          : 'text-red-500';
+          ? 'status-4xx'
+          : 'status-5xx';
 
   return (
     <div className="flex flex-col h-full">
       {/* Status bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-surface-100 dark:border-surface-700/50 bg-surface-50/50 dark:bg-surface-900/30">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-surface-100 dark:border-surface-700/50 bg-surface-50/50 dark:bg-surface-900/40">
+        <div className="flex items-center gap-2.5">
           {response.success ? (
-            <CheckCircle className="w-4 h-4 text-emerald-500" />
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
           ) : (
-            <XCircle className="w-4 h-4 text-red-500" />
+            <XCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
           )}
-          <span className={cn('text-sm font-bold tabular-nums', statusColor)}>
+          <span className={cn('text-sm font-extrabold tabular-nums', statusBadgeClass)}>
             {response.status_code || 'ERR'}
           </span>
-          <span className="text-xs text-surface-400">
+          <span className="text-[11px] text-surface-400 dark:text-surface-500">
             {getStatusText(response.status_code)}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Badges */}
-          <span className="px-2 py-0.5 rounded-md bg-surface-100 dark:bg-surface-800 text-[10px] font-medium text-surface-500 tabular-nums">
-            {formatDuration(response.response_time * 1000)}
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-surface-100 dark:bg-surface-800 text-[10px] font-semibold text-surface-500 tabular-nums">
+            ⚡ {formatDuration(response.response_time * 1000)}
           </span>
-          <span className="px-2 py-0.5 rounded-md bg-surface-100 dark:bg-surface-800 text-[10px] font-medium text-surface-500 tabular-nums">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-surface-100 dark:bg-surface-800 text-[10px] font-semibold text-surface-500 tabular-nums">
             {formatBytes(response.response_size)}
           </span>
           {response.retry_count > 0 && (
-            <span className="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-900/20 text-[10px] font-medium text-amber-600 dark:text-amber-400 tabular-nums">
-              {response.retry_count} retries
+            <span className="px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+              ↩ {response.retry_count}×
             </span>
           )}
         </div>
