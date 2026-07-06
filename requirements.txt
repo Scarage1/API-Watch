@@ -19,7 +19,7 @@ uvicorn[standard]==0.39.0
 gunicorn==23.0.0
 
 # Pydantic for data validation
-pydantic==2.12.5
+pydantic==2.13.4
 pydantic-settings==2.11.0
 
 # Database — SQLite (dev) + PostgreSQL (prod)
