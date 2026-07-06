@@ -32,7 +32,7 @@ asyncpg==0.31.0
 redis==7.0.1
 
 # Scheduling
-croniter==6.0.0
+croniter==6.2.3
 
 # Authentication
 python-jose[cryptography]==3.5.0
